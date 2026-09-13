@@ -1056,3 +1056,7 @@ The repository bundles workspace packages that are **not** covered by the root M
 - `packages/pptxgenjs` — [MIT](packages/pptxgenjs/package.json) (third-party)
 
 When redistributing the repository as a whole, the terms of each bundled package above apply to that package's files.
+
+
+
+docker compose --profile server-persistence --profile video-export up -d --build
