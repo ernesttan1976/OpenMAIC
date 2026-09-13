@@ -18,10 +18,10 @@
  *
  * The reference (live deployment) also renders the Discover/featured feed
  * through this hook and branches on `isLiveMode`. This workspace is
- * self-deploy and single-owner: `listStages` reads the local storage boundary,
- * every course is the user's own (`isOwner` is absent), and there is no
- * Discover feed to render — the workspace's discover-only mode therefore
- * leaves the feed slot empty, exactly as the reference does outside live mode.
+ * self-deploy: `listStages` reads the configured storage boundary and marks
+ * shared server courses with `isOwner`; there is no Discover feed to render,
+ * so the workspace's discover-only mode leaves the feed slot empty, exactly as
+ * the reference does outside live mode.
  */
 
 import { useCallback, useEffect, useRef, useState, type ReactElement } from 'react';

@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   runtimeConfigured: true,
   resolveRequestOwnerId: vi.fn(),
   fakeStore: null as ReturnType<typeof createFakeDocumentStore> | null,
+  stageAccessDb: { query: vi.fn() },
 }));
 
 vi.mock('@/lib/config/feature-flags', () => ({
@@ -19,6 +20,9 @@ vi.mock('@/lib/server/agent-runtime/owner', () => ({
 }));
 vi.mock('@/lib/server/agent-runtime/owner-scoped-documents', () => ({
   getOwnerScopedDocumentStore: async () => mocks.fakeStore!.store,
+}));
+vi.mock('@/lib/server/stage-access', () => ({
+  getStageAccessDb: async () => mocks.stageAccessDb,
 }));
 
 import { GET, POST } from '@/app/api/stages/route';
@@ -51,12 +55,39 @@ beforeEach(() => {
   mocks.runtimeConfigured = true;
   mocks.resolveRequestOwnerId.mockReturnValue('owner-1');
   mocks.fakeStore = createFakeDocumentStore();
+  mocks.stageAccessDb.query.mockResolvedValue({ rows: [] });
 });
 
 describe('GET /api/stages', () => {
-  it('lists every stage document owned by the caller as summaries', async () => {
-    mocks.fakeStore!.docs.set('stage-aaa', makeDocument('stage-aaa', 'Day 1'));
-    mocks.fakeStore!.docs.set('stage-bbb', makeDocument('stage-bbb', 'Day 2'));
+  it('lists every live stage and identifies stages owned by the caller', async () => {
+    mocks.stageAccessDb.query.mockResolvedValue({
+      rows: [
+        {
+          id: 'stage-aaa',
+          name: 'Day 1',
+          description: null,
+          interactive_mode: null,
+          task_engine_mode: null,
+          created_at: now,
+          updated_at: now,
+          scene_count: '0',
+          folder_id: null,
+          is_owner: true,
+        },
+        {
+          id: 'stage-bbb',
+          name: 'Day 2',
+          description: null,
+          interactive_mode: null,
+          task_engine_mode: null,
+          created_at: now,
+          updated_at: now,
+          scene_count: '2',
+          folder_id: null,
+          is_owner: false,
+        },
+      ],
+    });
 
     const response = await GET(new NextRequest('http://localhost/api/stages'));
     expect(response.status).toBe(200);
@@ -68,17 +99,20 @@ describe('GET /api/stages', () => {
           createdAt: now,
           updatedAt: now,
           sceneCount: 0,
+          isOwner: true,
         },
         {
           id: 'stage-bbb',
           name: 'Day 2',
           createdAt: now,
           updatedAt: now,
-          sceneCount: 0,
+          sceneCount: 2,
+          isOwner: false,
         },
       ],
     });
     expect(mocks.resolveRequestOwnerId).toHaveBeenCalledOnce();
+    expect(mocks.stageAccessDb.query).toHaveBeenCalledWith(expect.any(String), ['owner-1']);
   });
 
   it('answers 404 when the agent runtime is not configured', async () => {

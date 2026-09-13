@@ -112,7 +112,11 @@ export interface StageListItem {
   taskEngineMode?: boolean;
   /** Folder this course belongs to; undefined = unfiled. Device-local only. */
   folderId?: string;
+  /** False when this shared course belongs to another user and is read-only. */
+  isOwner?: boolean;
 }
+
+type SharedStageSummary = DocumentSummary & { isOwner?: boolean };
 
 function stampStage(stageId: string, stage: Stage, now: number): Stage {
   return {
@@ -754,22 +758,22 @@ async function performStageDeletion(stageId: string): Promise<void> {
 }
 
 /**
- * PG mode: the owner-scoped course listing.
+ * PG mode: the shared course listing.
  *
  * The generic `GET /api/persistence/documents` listing is deliberately refused
- * server-side (`403 FORBIDDEN_DOCUMENTS`): the capability model serves reads by
- * id and listings owner-only, so the home's course list must not ask for an
- * unscoped listing at all. `GET /api/stages` IS the owner listing — it resolves
- * the anonymous owner from the same cookie the workbench uses and returns that
- * owner's stage documents. Folders list through the owner-scoped
+ * server-side (`403 FORBIDDEN_DOCUMENTS`), so the home's course list must not
+ * ask the document store for an unscoped listing. `GET /api/stages` is the
+ * shared library: it resolves the anonymous owner from the same cookie the
+ * workbench uses and returns each live stage with an `isOwner` edit capability.
+ * Folders list through the owner-scoped
  * `GET /api/folders` (see `listOwnerFoldersFromServer`), while membership stays
  * device-local (Dexie), so the same membership overlay the local path applies
  * keeps courses filed in this browser grouped.
  */
-async function listOwnerStagesFromServer(): Promise<StageListItem[]> {
+async function listSharedStagesFromServer(): Promise<StageListItem[]> {
   const res = await fetch('/api/stages', { credentials: 'include' });
   if (!res.ok) {
-    throw new Error(`Failed to list owner stages: HTTP ${res.status}`);
+    throw new Error(`Failed to list shared stages: HTTP ${res.status}`);
   }
   const body = (await res.json().catch(() => null)) as { stages?: unknown } | null;
   if (!body || !Array.isArray(body.stages)) {
@@ -777,7 +781,7 @@ async function listOwnerStagesFromServer(): Promise<StageListItem[]> {
   }
   const memberships = await db.stageFolders.toArray();
   const folderByStage = new Map(memberships.map((m) => [m.stageId, m.folderId]));
-  return (body.stages as DocumentSummary[])
+  return (body.stages as SharedStageSummary[])
     .map((item) => {
       const base: StageListItem = {
         id: item.id,
@@ -788,6 +792,7 @@ async function listOwnerStagesFromServer(): Promise<StageListItem[]> {
         ...(item.description !== undefined ? { description: item.description } : {}),
         ...(item.interactiveMode !== undefined ? { interactiveMode: item.interactiveMode } : {}),
         ...(item.taskEngineMode !== undefined ? { taskEngineMode: item.taskEngineMode } : {}),
+        ...(item.isOwner !== undefined ? { isOwner: item.isOwner } : {}),
       };
       const folderId = folderByStage.get(item.id) ?? item.folderId;
       return folderId ? { ...base, folderId } : base;
@@ -802,9 +807,8 @@ export async function listStages(): Promise<StageListItem[]> {
   try {
     if (isBrowserPersistenceEnabled()) {
       // Server persistence is on: the generic document listing answers 403 by
-      // design, so the home/workspace library lists through the owner-scoped
-      // workbench surface instead.
-      return await listOwnerStagesFromServer();
+      // design, so the home/workspace library lists through its shared surface.
+      return await listSharedStagesFromServer();
     }
     const summaries = await getDocumentStore().listDocuments();
     const ids = new Set(summaries.map((summary) => summary.id));

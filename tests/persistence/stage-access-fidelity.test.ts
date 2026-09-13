@@ -98,7 +98,7 @@ describe('reference-fidelity stage access', () => {
     expect(provider.pool).toBe(pool);
   });
 
-  it('allows capability reads, refuses foreign writes, and filters the owner library', async () => {
+  it('allows shared reads, refuses foreign writes, and identifies library ownership', async () => {
     const connectionString = process.env.DATABASE_URL!;
     const { getServerPersistenceProvider } = await import('@/lib/persistence/server-provider');
     await getServerPersistenceProvider(connectionString, () => pool as never);
@@ -149,9 +149,11 @@ describe('reference-fidelity stage access', () => {
       }),
     );
     await expect(ownerList.json()).resolves.toMatchObject({
-      stages: [expect.objectContaining({ id: stageId })],
+      stages: [expect.objectContaining({ id: stageId, isOwner: true })],
     });
-    await expect(visitorList.json()).resolves.toEqual({ stages: [] });
+    await expect(visitorList.json()).resolves.toMatchObject({
+      stages: [expect.objectContaining({ id: stageId, isOwner: false })],
+    });
   });
 
   it('tombstones deletions and permanently retires the stage id', async () => {

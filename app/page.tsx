@@ -1304,12 +1304,14 @@ function HomePage() {
                               onClick={() => router.push(`/classroom/${classroom.id}`)}
                               overlay={
                                 <>
-                                  <MoveToFolderMenu
-                                    folders={folders}
-                                    currentFolderId={classroom.folderId}
-                                    onMove={(folderId) => handleMoveCourse(classroom.id, folderId)}
-                                    onCreateAndMove={handleCreateAndMove(classroom.id)}
-                                  />
+                                  {classroom.isOwner !== false && (
+                                    <MoveToFolderMenu
+                                      folders={folders}
+                                      currentFolderId={classroom.folderId}
+                                      onMove={(folderId) => handleMoveCourse(classroom.id, folderId)}
+                                      onCreateAndMove={handleCreateAndMove(classroom.id)}
+                                    />
+                                  )}
                                   {/* Search view: show the owning folder as a badge. */}
                                   {isSearching && classroom.folderId && (
                                     <span className="absolute bottom-2 left-2 z-10 inline-flex items-center gap-1 rounded-md bg-violet-500/80 px-1.5 py-0.5 text-[10px] font-medium text-white backdrop-blur-sm pointer-events-none">
@@ -1684,6 +1686,7 @@ function ClassroomCard({
   }, [editing]);
 
   const isTaskEngineMode = classroom.taskEngineMode === true;
+  const isOwner = classroom.isOwner !== false;
   const showModeBadge = classroom.interactiveMode || isTaskEngineMode;
   const ModeBadgeIcon = isTaskEngineMode ? Sparkles : Atom;
   const modeBadgeLabel = isTaskEngineMode ? 'Vocational Mode' : t('toolbar.interactiveModeLabel');
@@ -1707,7 +1710,7 @@ function ClassroomCard({
     <div
       className="group cursor-pointer"
       onClick={confirmingDelete ? undefined : onClick}
-      draggable={!confirmingDelete && !editing}
+      draggable={isOwner && !confirmingDelete && !editing}
       onDragStart={(e) => {
         e.dataTransfer.setData('text/stage-id', classroom.id);
         e.dataTransfer.effectAllowed = 'move';
@@ -1768,9 +1771,15 @@ function ClassroomCard({
           </Tooltip>
         )}
 
+        {!isOwner && (
+          <span className="absolute top-2 left-2 z-10 rounded-full bg-black/40 px-2 py-0.5 text-[10px] font-medium text-white backdrop-blur-sm">
+            Read-only
+          </span>
+        )}
+
         {/* Delete — top-right, only on hover */}
         <AnimatePresence>
-          {!confirmingDelete && (
+          {!confirmingDelete && isOwner && (
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}

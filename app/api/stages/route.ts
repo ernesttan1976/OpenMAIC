@@ -1,12 +1,11 @@
 /**
  * /api/stages — the workbench's course-document index and create face.
  *
- * Every handler is owner-scoped exactly like the agent tools: the owner
- * resolves from the anonymous cookie (`withRequestOwnerId`) and is never a
- * request parameter, and all reads and writes go through the owner-bound
- * document store (`getOwnerScopedDocumentStore`), the same seam the runner
- * binds for the stage tools. A stage created here is visible to this browser
- * and to nobody else.
+ * The index is shared: every caller sees every live course, with `isOwner`
+ * indicating whether they may mutate it. The owner resolves from the anonymous
+ * cookie (`withRequestOwnerId`) and is never a request parameter. Writes still
+ * go through the owner-bound document store (`getOwnerScopedDocumentStore`),
+ * the same seam the runner binds for the stage tools.
  *
  * The configured runtime gates the whole family: these routes serve the
  * workbench, which is agent-runtime territory, so a runtime that is off OR
@@ -23,6 +22,7 @@ import { getOwnerScopedDocumentStore } from '@/lib/server/agent-runtime/owner-sc
 import { ownerJson } from '@/lib/server/agent-runtime/route-response';
 import { STAGE_NAME_MAX_LENGTH } from '@/lib/server/agent-runtime/stage-limits';
 import { withRequestOwnerId } from '@/lib/server/agent-runtime/with-owner';
+import { getStageAccessDb } from '@/lib/server/stage-access';
 
 export const runtime = 'nodejs';
 
@@ -31,13 +31,56 @@ function createStageId(): string {
   return `stage-${randomBytes(9).toString('base64url')}`;
 }
 
-// GET /api/stages — list every stage document owned by the caller.
+interface SharedStageRow extends Record<string, unknown> {
+  id: string;
+  name: string;
+  description: string | null;
+  interactive_mode: boolean | null;
+  task_engine_mode: boolean | null;
+  created_at: number | string;
+  updated_at: number | string;
+  scene_count: number | string;
+  folder_id: string | null;
+  is_owner: boolean;
+}
+
+// GET /api/stages — list every live stage, with edit ownership for this viewer.
 export async function GET(req: NextRequest) {
   if (!isAgentRuntimeConfigured()) return new Response('Not found', { status: 404 });
 
   return withRequestOwnerId(req, async (ownerId, responseHeaders) => {
-    const store = await getOwnerScopedDocumentStore(ownerId);
-    const stages = await store.listDocuments();
+    const db = await getStageAccessDb();
+    const result = await db.query<SharedStageRow>(
+      `SELECT stages.id,
+              stages.name,
+              stages.description,
+              stages.interactive_mode,
+              stages.task_engine_mode,
+              stages.created_at,
+              stages.updated_at,
+              CASE WHEN meta.owner_id = $1 THEN stages.folder_id ELSE NULL END AS folder_id,
+              COUNT(scenes.id)::text AS scene_count,
+              (meta.owner_id = $1) AS is_owner
+         FROM stage_meta AS meta
+         JOIN document_stages AS stages ON stages.id = meta.stage_id
+         LEFT JOIN document_scenes AS scenes ON scenes.stage_id = stages.id
+        WHERE meta.deleted_at IS NULL
+        GROUP BY stages.id, meta.owner_id
+        ORDER BY stages.updated_at DESC, stages.id ASC`,
+      [ownerId],
+    );
+    const stages = result.rows.map((row) => ({
+      id: row.id,
+      name: row.name,
+      ...(row.description === null ? {} : { description: row.description }),
+      ...(row.interactive_mode === null ? {} : { interactiveMode: row.interactive_mode }),
+      ...(row.task_engine_mode === null ? {} : { taskEngineMode: row.task_engine_mode }),
+      createdAt: Number(row.created_at),
+      updatedAt: Number(row.updated_at),
+      sceneCount: Number(row.scene_count),
+      ...(row.folder_id === null ? {} : { folderId: row.folder_id }),
+      isOwner: row.is_owner === true,
+    }));
     return ownerJson({ stages }, 200, responseHeaders);
   });
 }

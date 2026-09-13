@@ -1,14 +1,15 @@
 // @vitest-environment jsdom
 
 /**
- * PG mode home listing — the owner-scoped course list.
+ * PG mode home listing — the shared course list.
  *
  * With server persistence on (`NEXT_PUBLIC_PERSISTENCE=1`) the generic
  * `GET /api/persistence/documents` listing is refused server-side
  * (`403 FORBIDDEN_DOCUMENTS`) by the capability model: reads are by-id and
- * listings are owner-only. The home/workspace library must therefore list
- * through the owner-scoped workbench surface (`GET /api/stages`, the same
- * anonymous-owner cookie the workbench uses) instead of the generic listing —
+ * generic listings are intentionally unavailable. The home/workspace library
+ * must therefore list through the shared workbench surface (`GET /api/stages`,
+ * which uses the same anonymous-owner cookie to mark each course's edit
+ * ownership) instead of the generic listing —
  * and must surface no persistence warning when that listing succeeds.
  *
  * The storage seams (IndexedDB document store, Dexie) are mocked so the local
@@ -89,13 +90,13 @@ function Harness({ onDiscovery }: { onDiscovery: (value: HomeDiscovery) => void 
   return null;
 }
 
-const OWNER_STAGES = [
-  { id: 'stage-1', name: '光的折射', sceneCount: 12, createdAt: 1, updatedAt: 2 },
-  { id: 'stage-2', name: '二次函数', sceneCount: 0, createdAt: 3, updatedAt: 4 },
+const SHARED_STAGES = [
+  { id: 'stage-1', name: '光的折射', sceneCount: 12, createdAt: 1, updatedAt: 2, isOwner: true },
+  { id: 'stage-2', name: '二次函数', sceneCount: 0, createdAt: 3, updatedAt: 4, isOwner: false },
 ];
 
 function stagesResponse() {
-  return new Response(JSON.stringify({ stages: OWNER_STAGES }), {
+  return new Response(JSON.stringify({ stages: SHARED_STAGES }), {
     status: 200,
     headers: { 'Content-Type': 'application/json' },
   });
@@ -108,8 +109,8 @@ function foldersResponse() {
   });
 }
 
-/** Route the mounted hook's owner-scoped listings: stages + folders. */
-function ownerListingsFetch() {
+/** Route the mounted hook's shared course and owner-scoped folder listings. */
+function sharedListingsFetch() {
   const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
     const url = String(input);
     if (url === '/api/stages') return stagesResponse();
@@ -140,7 +141,7 @@ describe('PG-mode home listing', () => {
     vi.resetModules();
   });
 
-  it('lists the owner’s stages through /api/stages and never asks for the generic listing', async () => {
+  it('lists shared stages through /api/stages and never asks for the generic listing', async () => {
     const fetchMock = vi.mocked(fetch);
     fetchMock.mockResolvedValue(stagesResponse());
 
@@ -149,8 +150,8 @@ describe('PG-mode home listing', () => {
 
     // The list mirrors the local path's newest-first order.
     expect(stages).toEqual([
-      expect.objectContaining({ id: 'stage-2', name: '二次函数', sceneCount: 0 }),
-      expect.objectContaining({ id: 'stage-1', name: '光的折射', sceneCount: 12 }),
+      expect.objectContaining({ id: 'stage-2', name: '二次函数', sceneCount: 0, isOwner: false }),
+      expect.objectContaining({ id: 'stage-1', name: '光的折射', sceneCount: 12, isOwner: true }),
     ]);
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const [url, init] = fetchMock.mock.calls[0]!;
@@ -162,8 +163,8 @@ describe('PG-mode home listing', () => {
     expect(mocks.listLegacyStages).not.toHaveBeenCalled();
   });
 
-  it('mounts the home library on the owner listing with no persistence warning', async () => {
-    const fetchMock = ownerListingsFetch();
+  it('mounts the home library on the shared listing with no persistence warning', async () => {
+    const fetchMock = sharedListingsFetch();
 
     const container = document.createElement('div');
     document.body.appendChild(container);
@@ -183,12 +184,12 @@ describe('PG-mode home listing', () => {
       expect.objectContaining({ id: 'stage-2', name: '二次函数' }),
       expect.objectContaining({ id: 'stage-1', name: '光的折射' }),
     ]);
-    // The owner listing succeeded — no "Persistence is unavailable" toast.
+    // The shared listing succeeded — no "Persistence is unavailable" toast.
     expect(mocks.toastError).not.toHaveBeenCalled();
     expect(fetchMock).toHaveBeenCalledWith('/api/stages', expect.objectContaining({}));
   });
 
-  it('propagates a refused owner listing so the caller can surface the warning', async () => {
+  it('propagates a refused shared listing so the caller can surface the warning', async () => {
     const fetchMock = vi.mocked(fetch);
     fetchMock.mockResolvedValue(new Response('forbidden', { status: 403 }));
 
