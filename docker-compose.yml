@@ -35,6 +35,7 @@ services:
     networks:
       - default # outbound internet (LLM/media provider APIs, etc.)
       - render # reach the render service over the isolated network
+      - searxng # reach the self-hosted SearXNG proxy
     volumes:
       # Optional: mount server-providers.yml for provider config
       # - ./server-providers.yml:/app/server-providers.yml:ro
@@ -135,6 +136,9 @@ services:
 
 networks:
   default: {}
+  searxng:
+    external: true
+    name: searxng_default
   # Isolated network for app <-> render-service traffic. `internal: true` means
   # no route to the host or internet. Both services share it so the app can
   # reach the render service; the render container additionally blocks its own
