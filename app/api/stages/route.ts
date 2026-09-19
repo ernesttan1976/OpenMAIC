@@ -1,9 +1,8 @@
 /**
  * /api/stages — the workbench's course-document index and create face.
  *
- * The index is shared: every caller sees every live course, with `isOwner`
- * indicating whether they may mutate it. The owner resolves from the anonymous
- * cookie (`withRequestOwnerId`) and is never a request parameter. Writes still
+ * The index contains only courses owned by or explicitly shared with the
+ * signed-in account. Writes still
  * go through the owner-bound document store (`getOwnerScopedDocumentStore`),
  * the same seam the runner binds for the stage tools.
  *
@@ -42,9 +41,10 @@ interface SharedStageRow extends Record<string, unknown> {
   scene_count: number | string;
   folder_id: string | null;
   is_owner: boolean;
+  role: 'owner' | 'editor' | 'viewer';
 }
 
-// GET /api/stages — list every live stage, with edit ownership for this viewer.
+// GET /api/stages — list courses available to this account.
 export async function GET(req: NextRequest) {
   if (!isAgentRuntimeConfigured()) return new Response('Not found', { status: 404 });
 
@@ -60,12 +60,15 @@ export async function GET(req: NextRequest) {
               stages.updated_at,
               CASE WHEN meta.owner_id = $1 THEN stages.folder_id ELSE NULL END AS folder_id,
               COUNT(scenes.id)::text AS scene_count,
-              (meta.owner_id = $1) AS is_owner
+              (meta.owner_id = $1) AS is_owner,
+              CASE WHEN meta.owner_id = $1 THEN 'owner' ELSE collaborators.role END AS role
          FROM stage_meta AS meta
-         JOIN document_stages AS stages ON stages.id = meta.stage_id
-         LEFT JOIN document_scenes AS scenes ON scenes.stage_id = stages.id
-        WHERE meta.deleted_at IS NULL
-        GROUP BY stages.id, meta.owner_id
+          JOIN document_stages AS stages ON stages.id = meta.stage_id
+          LEFT JOIN stage_collaborators AS collaborators
+            ON collaborators.stage_id = meta.stage_id AND collaborators.user_id = $1
+          LEFT JOIN document_scenes AS scenes ON scenes.stage_id = stages.id
+         WHERE meta.deleted_at IS NULL AND (meta.owner_id = $1 OR collaborators.user_id IS NOT NULL)
+         GROUP BY stages.id, meta.owner_id, collaborators.role
         ORDER BY stages.updated_at DESC, stages.id ASC`,
       [ownerId],
     );
@@ -78,8 +81,10 @@ export async function GET(req: NextRequest) {
       createdAt: Number(row.created_at),
       updatedAt: Number(row.updated_at),
       sceneCount: Number(row.scene_count),
-      ...(row.folder_id === null ? {} : { folderId: row.folder_id }),
-      isOwner: row.is_owner === true,
+       ...(row.folder_id === null ? {} : { folderId: row.folder_id }),
+       isOwner: row.is_owner === true,
+       role: row.role,
+       canEdit: row.role === 'owner' || row.role === 'editor',
     }));
     return ownerJson({ stages }, 200, responseHeaders);
   });

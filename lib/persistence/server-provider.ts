@@ -12,6 +12,8 @@ import { lazyAssetByteStore } from '@/lib/persistence/asset-byte-store';
 import { resolveAssetQuotaBytes } from '@/lib/persistence/asset-quota';
 import { ensureOwnerMaterialSchema } from '@/lib/persistence/owner-materials';
 import { ensureStageMetaSchema } from '@/lib/persistence/stage-meta';
+import { ensureAuthSchema } from '@/lib/auth/schema';
+import { ensureStageCollaboratorSchema } from '@/lib/persistence/stage-collaborators';
 import { APP_RUNTIME_PAYLOAD_VALIDATORS } from '@/lib/runtime/payload-validators';
 
 export type PersistencePoolFactory = (connectionString: string) => Pool;
@@ -48,7 +50,9 @@ async function createServerPersistenceProvider(
   try {
     await ensureSchema(queryable);
     await ensureDocumentSchema(queryable);
+    await ensureAuthSchema(queryable);
     await ensureStageMetaSchema(queryable);
+    await ensureStageCollaboratorSchema(queryable);
     await ensureOwnerMaterialSchema(queryable);
     await ensureAssetSchema(queryable);
     const withTransaction = nodePostgresTransaction(queryable);

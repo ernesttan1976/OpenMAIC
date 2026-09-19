@@ -17,6 +17,8 @@ export type StageMetaResult =
 
 export interface StageMetaView {
   isOwner: boolean;
+  canEdit: boolean;
+  role: 'owner' | 'editor' | 'viewer';
   isPublic: boolean;
   publishedAt: number | null;
   generationComplete: boolean;
@@ -52,7 +54,9 @@ export async function fetchStageMeta(
     return {
       outcome: 'found',
       meta: {
-        isOwner: body.isOwner === true,
+         isOwner: body.isOwner === true,
+         canEdit: body.canEdit === true,
+         role: body.role === 'owner' || body.role === 'editor' ? body.role : 'viewer',
         isPublic: body.isPublic === true,
         publishedAt: typeof body.publishedAt === 'number' ? body.publishedAt : null,
         generationComplete: body.generationComplete === true,

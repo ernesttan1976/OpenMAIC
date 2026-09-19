@@ -15,15 +15,13 @@ import {
   type DocumentAccess,
 } from '@/lib/persistence/document-access';
 import { createOwnerBoundDocumentStore } from '@/lib/persistence/owner-bound-document-store';
-import {
-  authenticatePersistenceRequest,
-  SHARED_ASSET_PRINCIPAL,
-} from '@/lib/persistence/server-auth';
+import { SHARED_ASSET_PRINCIPAL } from '@/lib/persistence/server-auth';
 import {
   getServerPersistenceProvider,
   type PersistencePoolFactory,
 } from '@/lib/persistence/server-provider';
 import { readStageMeta } from '@/lib/persistence/stage-meta';
+import { stageRole } from '@/lib/persistence/stage-collaborators';
 import { APP_RUNTIME_PAYLOAD_VALIDATORS } from '@/lib/runtime/payload-validators';
 import { withRequestOwnerId } from '@/lib/server/agent-runtime/with-owner';
 
@@ -82,6 +80,7 @@ function indirectEgressWithinGrace(
 async function createPersistenceHandler(
   connectionString: string,
   ownerId: string,
+  documentOwnerId: string,
   access: DocumentAccess,
   poolFactory?: PersistencePoolFactory,
 ): Promise<RequestListener> {
@@ -91,7 +90,7 @@ async function createPersistenceHandler(
   );
   const documentStore = createOwnerBoundDocumentStore({
     pool,
-    ownerId,
+    ownerId: documentOwnerId,
     validateScene: validateAppScene,
     validateStage: validateAppStage,
   });
@@ -139,7 +138,7 @@ async function createPersistenceHandler(
       if (request.url?.startsWith('/assets')) {
         return { key: SHARED_ASSET_PRINCIPAL, learnerKey: ownerId };
       }
-      return authenticatePersistenceRequest(request);
+      return { learnerKey: ownerId };
     },
     authorizeAssets: async (_principal, request) => {
       const method = (request.method ?? 'GET').toUpperCase();
@@ -310,19 +309,12 @@ export async function handlePersistenceRequest(
   if (!connectionString) {
     return jsonError(404, 'PERSISTENCE_NOT_CONFIGURED', 'server persistence not configured');
   }
-  if (!process.env.PERSISTENCE_DEV_TOKEN) {
-    return jsonError(
-      503,
-      'PERSISTENCE_DEV_TOKEN_MISSING',
-      'server persistence requires PERSISTENCE_DEV_TOKEN (development auth only)',
-    );
-  }
-
   return withRequestOwnerId(request, async (ownerId, responseHeaders) => {
     try {
       const path = routeRelativePath(request);
       const action = parseDocumentAction(request.method, path);
       let access: DocumentAccess = 'allow';
+      let documentOwnerId = ownerId;
       if (path === '/documents' || path.startsWith('/documents/')) {
         const { pool } = await getServerPersistenceProvider(connectionString, deps.poolFactory);
         const queryable = pool;
@@ -335,14 +327,25 @@ export async function handlePersistenceRequest(
               .query('SELECT 1 FROM document_stages WHERE id = $1', [stageId])
               .then((result) => result.rows.length > 0),
           (stageId) => readStageMeta(queryable, stageId),
+          (stageId, userId) => stageRole(queryable, stageId, userId),
         );
+        if (action.kind !== 'create' && action.kind !== 'list' && action.kind !== 'unknown') {
+          const meta = await readStageMeta(queryable, action.stageId);
+          if (meta) documentOwnerId = meta.ownerId;
+        }
       }
 
       const response =
         access === 'not-found'
           ? jsonError(404, 'DOCUMENT_NOT_FOUND', '@openmaic/storage: document not found')
           : await runNodeHandler(
-              await createPersistenceHandler(connectionString, ownerId, access, deps.poolFactory),
+              await createPersistenceHandler(
+                connectionString,
+                ownerId,
+                documentOwnerId,
+                access,
+                deps.poolFactory,
+              ),
               request,
             );
       for (const [name, value] of responseHeaders.entries()) response.headers.append(name, value);

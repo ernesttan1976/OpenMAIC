@@ -1,6 +1,7 @@
 'use client';
 
 import { Stage } from '@/components/stage';
+import { CollaboratorManager } from '@/components/classroom/collaborator-manager';
 import { ThemeProvider } from '@/lib/hooks/use-theme';
 import { useStageStore } from '@/lib/store';
 import { useSettingsStore } from '@/lib/store/settings';
@@ -120,10 +121,10 @@ export default function ClassroomDetailPage() {
           noteStageGenerationOwnership(classroomId, ownership);
           if (result.outcome === 'found') {
             noteStageOwnership(classroomId, true, {
-              isOwner: result.meta.isOwner,
+              isOwner: result.meta.canEdit,
             });
             useStageStore.getState().setViewerAccess({
-              isOwner: result.meta.isOwner,
+              isOwner: result.meta.canEdit,
             });
           } else if (result.outcome === 'unavailable') {
             // A silent sidecar is not "this is a stranger's course": record
@@ -286,6 +287,7 @@ export default function ClassroomDetailPage() {
     <ThemeProvider>
       <MediaStageProvider value={classroomId}>
         <div className="h-screen flex flex-col overflow-hidden">
+          <CollaboratorManager stageId={classroomId} />
           {loading ? (
             <div className="flex-1 flex items-center justify-center bg-gray-50 dark:bg-gray-900">
               <div className="text-center text-muted-foreground">

@@ -12,6 +12,9 @@ import { ServerProvidersInit } from '@/components/server-providers-init';
 import { StorageHealthNotice } from '@/components/storage-health-notice';
 import { AccessCodeGuard } from '@/components/access-code-guard';
 import { ProSwapWatcher } from '@/components/workbench/ProSwapWatcher';
+import { getRequestUser } from '@/lib/auth/request-user';
+import { headers } from 'next/headers';
+import { redirect } from 'next/navigation';
 
 // The UI font is loaded from @fontsource's stylesheet rather than next/font,
 // because only the stylesheet carries the per-subset `unicode-range`
@@ -34,11 +37,13 @@ export const metadata: Metadata = {
     'The open-source AI interactive classroom. Upload a PDF to instantly generate an immersive, multi-agent learning experience.',
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const user = await getRequestUser({ headers: await headers() });
+  if (!user) redirect('/api/auth/signin');
   return (
     <html lang="en" suppressHydrationWarning>
       <body

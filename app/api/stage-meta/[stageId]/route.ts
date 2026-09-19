@@ -25,8 +25,9 @@ import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 
 import { isServerPersistenceConfigured } from '@/lib/config/feature-flags';
-import { resolveStageAccess } from '@/lib/server/stage-access';
+import { getStageAccessDb, resolveStageAccess } from '@/lib/server/stage-access';
 import { withRequestOwnerId } from '@/lib/server/agent-runtime/with-owner';
+import { stageRole } from '@/lib/persistence/stage-collaborators';
 
 // Per-viewer and mutable on every publish/unpublish/delete: this response must
 // never be cached, by Next or by anything in front of it.
@@ -60,11 +61,17 @@ export async function GET(req: NextRequest, { params }: Params) {
       // ONLY owner signal, so a `true` here must mean every write through the
       // owner-bound store will be accepted (the store re-checks the owner
       // scope inside its write transactions).
-      const isOwner = access.ownerId === ownerId;
+       const role = await stageRole(await getStageAccessDb(), stageId, ownerId);
+       if (role === 'none') {
+         return NextResponse.json({ error: 'not_found' }, { status: 404, headers: responseHeaders });
+       }
+       const isOwner = role === 'owner';
 
       return NextResponse.json(
         {
-          isOwner,
+           isOwner,
+           canEdit: role === 'owner' || role === 'editor',
+           role,
           isPublic: access.isPublic,
           publishedAt: access.publishedAt,
           generationComplete: access.generationComplete,

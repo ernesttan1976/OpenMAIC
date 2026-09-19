@@ -27,10 +27,21 @@ import { getOwnerScopedDocumentStore } from '@/lib/server/agent-runtime/owner-sc
 import { ownerApiError, ownerJson, ownerNotFound } from '@/lib/server/agent-runtime/route-response';
 import { withRequestOwnerId } from '@/lib/server/agent-runtime/with-owner';
 import { STAGE_NAME_MAX_LENGTH } from '@/lib/server/agent-runtime/stage-limits';
+import { getStageAccessDb, resolveStageAccess } from '@/lib/server/stage-access';
+import { stageRole } from '@/lib/persistence/stage-collaborators';
 
 export const runtime = 'nodejs';
 
 type Params = { params: Promise<{ id: string }> };
+
+async function accessFor(stageId: string, userId: string, write = false) {
+  const db = await getStageAccessDb();
+  const access = await resolveStageAccess(stageId, db);
+  if (!access) return null;
+  const role = await stageRole(db, stageId, userId);
+  if (role === 'none' || (write && role !== 'owner' && role !== 'editor')) return null;
+  return { ownerId: access.ownerId, role };
+}
 
 /** A save refused because the payload is not a structurally valid document. */
 function isStoreValidationError(error: unknown): error is Error {
@@ -67,7 +78,9 @@ export async function GET(req: NextRequest, { params }: Params) {
 
   return withRequestOwnerId(req, async (ownerId, responseHeaders) => {
     const { id } = await params;
-    const store = await getOwnerScopedDocumentStore(ownerId);
+    const access = await accessFor(id, ownerId);
+    if (!access) return ownerNotFound(responseHeaders);
+    const store = await getOwnerScopedDocumentStore(access.ownerId);
     const document = await store.loadDocument(id);
     if (!document) return ownerNotFound(responseHeaders);
     return ownerJson(document, 200, responseHeaders);
@@ -99,7 +112,9 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 
   return withRequestOwnerId(req, async (ownerId, responseHeaders) => {
     const { id } = await params;
-    const store = await getOwnerScopedDocumentStore(ownerId);
+    const access = await accessFor(id, ownerId, true);
+    if (!access) return ownerNotFound(responseHeaders);
+    const store = await getOwnerScopedDocumentStore(access.ownerId);
     const document = await store.loadDocument(id);
     if (!document) return ownerNotFound(responseHeaders);
     try {
@@ -153,7 +168,9 @@ export async function PUT(req: NextRequest, { params }: Params) {
         responseHeaders,
       );
     }
-    const store = await getOwnerScopedDocumentStore(ownerId);
+    const access = await accessFor(id, ownerId, true);
+    if (!access) return ownerNotFound(responseHeaders);
+    const store = await getOwnerScopedDocumentStore(access.ownerId);
     // Save is existence-gated (the reference's update path is too): PUT
     // updates a course that exists; it must not resurrect a deleted one or
     // mint a course under a client-chosen id. The owner scope is re-checked
@@ -182,7 +199,9 @@ export async function DELETE(req: NextRequest, { params }: Params) {
 
   return withRequestOwnerId(req, async (ownerId, responseHeaders) => {
     const { id } = await params;
-    const store = await getOwnerScopedDocumentStore(ownerId);
+    const access = await accessFor(id, ownerId, true);
+    if (!access || access.role !== 'owner') return ownerNotFound(responseHeaders);
+    const store = await getOwnerScopedDocumentStore(access.ownerId);
     await store.deleteDocument(id);
     return ownerJson({ ok: true }, 200, responseHeaders);
   });

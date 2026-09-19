@@ -14,6 +14,31 @@ function bufToHex(buf: ArrayBuffer): string {
     .join('');
 }
 
+function base64UrlToBytes(value: string): Uint8Array {
+  const base64 = value.replace(/-/g, '+').replace(/_/g, '/').padEnd(Math.ceil(value.length / 4) * 4, '=');
+  const binary = atob(base64);
+  return Uint8Array.from(binary, (character) => character.charCodeAt(0));
+}
+
+async function hasValidSession(request: NextRequest): Promise<boolean> {
+  const secret = process.env.AUTH_SECRET;
+  const value = request.cookies.get('openmaic_session')?.value;
+  if (!secret || !value) return false;
+  const separator = value.lastIndexOf('.');
+  if (separator < 1) return false;
+  const payload = value.slice(0, separator);
+  const signature = value.slice(separator + 1);
+  const key = await crypto.subtle.importKey('raw', encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  const expected = btoa(String.fromCharCode(...new Uint8Array(await crypto.subtle.sign('HMAC', key, encode(payload))))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  if (signature.length !== expected.length || signature !== expected) return false;
+  try {
+    const parsed = JSON.parse(new TextDecoder().decode(base64UrlToBytes(payload))) as { expiresAt?: unknown };
+    return typeof parsed.expiresAt === 'number' && parsed.expiresAt > Date.now();
+  } catch {
+    return false;
+  }
+}
+
 /** Verify an HMAC-signed token using Web Crypto API (Edge-compatible) */
 async function verifyToken(token: string, accessCode: string): Promise<boolean> {
   const dotIndex = token.indexOf('.');
@@ -55,6 +80,14 @@ export async function middleware(request: NextRequest) {
     isProWorkbenchEnabled() && (!canInspectServerRuntime || isAgentRuntimeConfigured());
   if (!workbenchEnabled && (pathname === '/workbench' || pathname.startsWith('/workbench/'))) {
     return new NextResponse('Not found', { status: 404 });
+  }
+
+  if (pathname.startsWith('/api/auth/')) return NextResponse.next();
+  if (!(await hasValidSession(request))) {
+    if (pathname.startsWith('/api/')) {
+      return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
+    }
+    return NextResponse.redirect(new URL('/api/auth/signin', request.url));
   }
 
   const accessCode = process.env.ACCESS_CODE;

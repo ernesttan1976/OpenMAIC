@@ -11,6 +11,7 @@ export type DocumentAction =
 export type DocumentAccess = 'allow' | 'forbid' | 'not-found';
 export type StageMetaReader = (stageId: string) => Promise<StageMetaRow | null>;
 export type DocumentExistenceReader = (stageId: string) => Promise<boolean>;
+export type CollaboratorRoleReader = (stageId: string, userId: string) => Promise<'owner' | 'editor' | 'viewer' | 'none'>;
 
 const LONE_SURROGATE = /[\uD800-\uDFFF]/u;
 
@@ -61,6 +62,7 @@ export async function decideDocumentAccess(
   readMeta: StageMetaReader,
   documentExists: DocumentExistenceReader,
   rereadMeta: StageMetaReader = readMeta,
+  readRole?: CollaboratorRoleReader,
 ): Promise<DocumentAccess> {
   if (!ownerId) return 'forbid';
   switch (action.kind) {
@@ -70,13 +72,16 @@ export async function decideDocumentAccess(
     case 'read': {
       const meta = await readMeta(action.stageId);
       if (!meta) return 'not-found';
-      return meta.deletedAt === null ? 'allow' : 'not-found';
+      if (meta.deletedAt !== null) return 'not-found';
+      const role = readRole ? await readRole(action.stageId, ownerId) : meta.ownerId === ownerId ? 'owner' : 'none';
+      return role === 'none' ? 'forbid' : 'allow';
     }
     case 'write': {
       const meta = await readMeta(action.stageId);
       if (!meta) return 'not-found';
-      if (meta.ownerId !== ownerId) return 'forbid';
-      return meta.deletedAt === null ? 'allow' : 'not-found';
+      if (meta.deletedAt !== null) return 'not-found';
+      const role = readRole ? await readRole(action.stageId, ownerId) : meta.ownerId === ownerId ? 'owner' : 'none';
+      return role === 'owner' || role === 'editor' ? 'allow' : 'forbid';
     }
     case 'delete': {
       const meta = await readMeta(action.stageId);
