@@ -28,8 +28,23 @@ async function hasValidSession(request: NextRequest): Promise<boolean> {
   if (separator < 1) return false;
   const payload = value.slice(0, separator);
   const signature = value.slice(separator + 1);
-  const key = await crypto.subtle.importKey('raw', encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
-  const expected = btoa(String.fromCharCode(...new Uint8Array(await crypto.subtle.sign('HMAC', key, encode(payload))))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  const key = await crypto.subtle.importKey(
+    'raw',
+    encode(secret).buffer as ArrayBuffer,
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign'],
+  );
+  const expected = btoa(
+    String.fromCharCode(
+      ...new Uint8Array(
+        await crypto.subtle.sign('HMAC', key, encode(payload).buffer as ArrayBuffer),
+      ),
+    ),
+  )
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/, '');
   if (signature.length !== expected.length || signature !== expected) return false;
   try {
     const parsed = JSON.parse(new TextDecoder().decode(base64UrlToBytes(payload))) as { expiresAt?: unknown };
