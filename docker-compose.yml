@@ -25,7 +25,10 @@ services:
       - .env.local
     environment:
       # Server-backed documents are the default deployment mode.
-      - DATABASE_URL=${DATABASE_URL:-postgres://openmaic:openmaic-dev@postgres:5432/openmaic}
+      # Keep the default application credential aligned with PostgreSQL when an
+      # operator changes PERSISTENCE_POSTGRES_PASSWORD. Set DATABASE_URL
+      # explicitly for external PostgreSQL or passwords requiring URL encoding.
+      - DATABASE_URL=${DATABASE_URL:-postgres://openmaic:${PERSISTENCE_POSTGRES_PASSWORD:-openmaic-dev}@postgres:5432/openmaic}
       # The render service is part of the default stack. The capability check
       # probes /health before advertising MP4 rendering.
       - RENDER_SERVICE_URL=http://render-service:9000
@@ -42,6 +45,8 @@ services:
   # Default PostgreSQL backing for the app-embedded persistence API.
   postgres:
     image: postgres:16
+    env_file:
+      - .env.local
     environment:
       - POSTGRES_DB=openmaic
       - POSTGRES_USER=openmaic

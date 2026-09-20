@@ -371,9 +371,11 @@ PostgreSQL service; override it in `.env.local` for an external database.
 
 `PERSISTENCE_POSTGRES_PASSWORD` initializes the PostgreSQL role only when the
 data directory is empty; changing it later does not rotate an existing
-`openmaic-postgres` volume. For a disposable local database, run
-`docker compose down -v`, set the new password and matching `DATABASE_URL`,
-then start the stack again. To preserve data, connect
+`openmaic-postgres` volume. When using the bundled database, Compose derives
+the default `DATABASE_URL` from this value. Set `DATABASE_URL` explicitly for
+an external database or a password containing URL-reserved characters
+(percent-encode the password). For a disposable local database, run
+`docker compose down -v`, set the new password, then start the stack again. To preserve data, connect
 as an administrator and run `ALTER ROLE openmaic WITH PASSWORD 'new-password';`,
 then update `DATABASE_URL`.
 
