@@ -49,7 +49,7 @@ export function Header({
 
   return (
     <>
-      <header className="h-20 px-8 flex items-center justify-between z-10 bg-transparent gap-4">
+      <header className="h-10 lg:h-20 px-8 flex items-center justify-between z-10 bg-transparent gap-4">
         <div className="flex items-center gap-3 min-w-0 flex-1">
           {hideBackControl
             ? null
@@ -78,7 +78,7 @@ export function Header({
                 {t('stage.currentScene')}
               </span>
               <h1
-                className="text-xl font-bold text-gray-800 dark:text-gray-200 tracking-tight truncate"
+                className="text-base lg:text-xl font-bold text-gray-800 dark:text-gray-200 tracking-tight truncate"
                 suppressHydrationWarning
               >
                 {currentSceneTitle || t('common.loading')}
