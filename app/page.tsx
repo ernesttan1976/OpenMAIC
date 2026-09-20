@@ -896,8 +896,8 @@ function HomePage() {
             />
 
             {/* Toolbar row */}
-            <div className="px-3 pb-3 flex items-end gap-2">
-              <div className="flex-1 min-w-0">
+            <div className="flex flex-wrap items-end gap-2 px-3 pb-3 lg:flex-nowrap">
+              <div className="w-full min-w-0 lg:flex-1">
                 <GenerationToolbar
                   webSearch={form.webSearch}
                   onWebSearchChange={(v) => updateForm('webSearch', v)}
@@ -1844,12 +1844,12 @@ function ClassroomCard({
       </div>
 
       {/* Info — outside the thumbnail */}
-      <div className="mt-2.5 px-1 flex items-center gap-2">
+      <div className="mt-2.5 flex flex-wrap items-center gap-2 px-1">
         <span className="shrink-0 inline-flex items-center rounded-full bg-violet-100 dark:bg-violet-900/30 px-2 py-0.5 text-[11px] font-medium text-violet-600 dark:text-violet-400">
           {classroom.sceneCount} {t('classroom.slides')} · {formatDate(classroom.updatedAt)}
         </span>
         {editing ? (
-          <div className="flex-1 min-w-0" onClick={(e) => e.stopPropagation()}>
+          <div className="w-full min-w-0 lg:flex-1" onClick={(e) => e.stopPropagation()}>
             <input
               ref={nameInputRef}
               value={nameDraft}
@@ -1868,7 +1868,7 @@ function ClassroomCard({
           <Tooltip>
             <TooltipTrigger asChild>
               <p
-                className="font-medium text-[15px] truncate text-foreground/90 min-w-0 cursor-text"
+                className="w-full min-w-0 cursor-text truncate text-[15px] font-medium text-foreground/90 lg:flex-1"
                 onDoubleClick={startRename}
               >
                 {classroom.name}
