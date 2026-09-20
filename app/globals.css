@@ -16,6 +16,8 @@
 @source "./slide-renderer-demo/**/*.{tsx,ts,jsx,js}";
 
 @custom-variant dark (&:is(.dark *));
+@custom-variant landscape (@media (orientation: landscape));
+@custom-variant portrait (@media (orientation: portrait));
 
 @theme inline {
   --color-background: var(--background);
