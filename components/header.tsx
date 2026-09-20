@@ -75,7 +75,7 @@ export function Header({
               briefly stack on top of the incoming EditChromeRoot's
               CommandBar title during the cross-fade. */}
           {mode !== 'edit' && (
-            <div className="flex flex-col min-w-0">
+            <div className="flex flex-col min-w-[150px] lg:min-w-0">
               <span className="text-[10px] uppercase tracking-widest font-bold text-gray-400 dark:text-gray-500 mb-0.5">
                 {t('stage.currentScene')}
               </span>
