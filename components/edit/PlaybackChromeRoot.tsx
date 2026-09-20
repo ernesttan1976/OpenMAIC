@@ -1626,7 +1626,7 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
             onRetryOutline={onRetryOutline}
             isCourseComplete={isCourseComplete}
             className={cn(
-              'max-lg:order-2 max-lg:!w-full max-lg:flex-none max-lg:h-[min(50svh,32rem)] max-lg:border-r-0 max-lg:border-t max-lg:shadow-[0_-2px_24px_rgba(0,0,0,0.02)]',
+              'max-lg:order-2 max-lg:!static max-lg:!w-full max-lg:flex-none max-lg:h-[min(50svh,32rem)] max-lg:border-r-0 max-lg:border-t max-lg:shadow-[0_-2px_24px_rgba(0,0,0,0.02)]',
               resolvedSidebarCollapsed && 'max-lg:hidden',
             )}
           />
@@ -1907,7 +1907,7 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
             collapsed={resolvedChatCollapsed}
             onCollapseChange={updateChatCollapsed}
             className={cn(
-              'max-lg:!w-full max-lg:flex-none max-lg:h-[min(50svh,32rem)] max-lg:border-l-0 max-lg:border-t max-lg:shadow-[0_-2px_24px_rgba(0,0,0,0.02)]',
+              'max-lg:!static max-lg:!w-full max-lg:flex-none max-lg:h-[min(50svh,32rem)] max-lg:border-l-0 max-lg:border-t max-lg:shadow-[0_-2px_24px_rgba(0,0,0,0.02)]',
               resolvedChatCollapsed && 'max-lg:hidden',
             )}
             activeBubbleId={activeBubbleId}
