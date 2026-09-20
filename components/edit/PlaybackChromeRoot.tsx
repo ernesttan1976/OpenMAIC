@@ -1615,10 +1615,12 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
       <div
         ref={stageRef}
         className={cn(
-          'flex-1 flex overflow-hidden bg-gray-50 dark:bg-gray-900 max-lg:flex-col max-lg:overflow-y-auto',
+          'flex-1 flex overflow-hidden bg-gray-50 dark:bg-gray-900',
           isPresenting && !controlsVisible && 'cursor-none',
         )}
       >
+        {/* Main Content Area */}
+          <div className="flex-1 flex overflow-hidden min-w-0 relative max-lg:flex-col max-lg:overflow-y-auto">
           <SceneSidebar
             collapsed={resolvedSidebarCollapsed}
             onCollapseChange={updateSidebarCollapsed}
@@ -1631,8 +1633,7 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
             )}
           />
 
-        {/* Main Content Area */}
-          <div className="flex-1 flex flex-col overflow-hidden min-w-0 relative max-lg:order-1 max-lg:flex-none max-lg:h-svh max-lg:overflow-y-auto">
+          <div className="flex-1 flex flex-col overflow-hidden min-w-0 relative max-lg:order-1 max-lg:flex-none max-lg:h-svh">
           {/* Header — playback only. The Pro Switch fires `onEnterProMode`
             (passed by the parent Stage) which awaits our `teardown()`
             before the parent flips mode to 'edit'. */}
@@ -1972,6 +1973,7 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
             onSegmentSealed={discussionTTS.handleSegmentSealed}
             shouldHoldAfterReveal={discussionTTS.shouldHold}
           />
+        </div>
         </div>
 
         {/* Scene switch confirmation dialog */}
