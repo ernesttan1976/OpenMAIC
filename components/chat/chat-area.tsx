@@ -285,7 +285,12 @@ export const ChatArea = forwardRef<ChatAreaRef, ChatAreaProps>(
           </div>
         )}
 
-        <div className={cn('flex flex-col w-full h-full overflow-hidden', collapsed && 'hidden')}>
+        <div
+          className={cn(
+            'flex flex-col w-full h-full overflow-hidden max-lg:landscape:min-h-[800px]',
+            collapsed && 'hidden',
+          )}
+        >
           <Tabs
             value={activeTab}
             onValueChange={(v) => setActiveTab(v as 'lecture' | 'chat')}
