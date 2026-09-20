@@ -16,6 +16,7 @@ import { getRequestUser } from '@/lib/auth/request-user';
 import { isAuthDebugEnabled } from '@/lib/auth/debug';
 import { AuthDebug } from '@/components/auth-debug';
 import { AccountMenu } from '@/components/account-menu';
+import { BrowserDocumentMigration } from '@/components/browser-document-migration';
 import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 
@@ -58,6 +59,7 @@ export default async function RootLayout({
             <ServerProvidersInit />
             {isAuthDebugEnabled() && <AuthDebug />}
             <AccountMenu user={user} />
+            <BrowserDocumentMigration />
             <ProSwapWatcher />
             <AccessCodeGuard>{children}</AccessCodeGuard>
             <Toaster position="top-center" />

@@ -328,22 +328,18 @@ store；缓存只用于提升性能，不是正确完成构建的必要条件。
 
 ### 服务端持久化（PostgreSQL）
 
-`server-persistence` profile 只跑两个容器：OpenMAIC 应用本体和 PostgreSQL。持久化 HTTP 服务内嵌在应用中（`/api/persistence`），没有独立的持久化服务。
+默认 Compose 栈会运行 OpenMAIC、PostgreSQL 和视频渲染服务。持久化 HTTP 服务内嵌在应用中（`/api/persistence`），没有独立的持久化服务。
 
 ```bash
 cp .env.example .env.local
-printf '\nDATABASE_URL=postgres://openmaic:openmaic-dev@postgres:5432/openmaic\nPERSISTENCE_DEV_TOKEN=openmaic-local-dev\n' >> .env.local
-NEXT_PUBLIC_PERSISTENCE=1 NEXT_PUBLIC_PERSISTENCE_TOKEN=openmaic-local-dev docker compose --profile server-persistence up --build
+docker compose up -d --build
 ```
 
-和往常一样把服务商 API Key 填进 `.env.local`。之后运行时会话和课程文档都由服务端存储；设备维度的 KV 数据（包括匿名设备学习者 key 和播放进度）仍保留在浏览器中。已有的浏览器课程数据会在首次访问时逐门课程懒式迁移到服务端存储，迁移路径与浏览器持久化一致且经过校验。
+和往常一样把服务商 API Key 填进 `.env.local`。之后运行时会话和课程文档都由服务端存储；设备维度的 KV 数据（包括匿名设备学习者 key 和播放进度）仍保留在浏览器中。已有的浏览器课程数据会在用户登录后迁移到服务端；服务端已有内容不会被旧的本地副本覆盖。
 
-`NEXT_PUBLIC_PERSISTENCE` 是**编译期开关**，会打进浏览器 bundle。启用它的构建必须部署在具备可用运行时 `DATABASE_URL` 和 `PERSISTENCE_DEV_TOKEN` 的环境中，且构建时的 `NEXT_PUBLIC_PERSISTENCE_TOKEN` 必须与服务端 token 一致。否则浏览器会选择 HTTP 持久化但内嵌端点返回配置/认证/初始化错误；首页会弹出持久化不可用的提示并保留原有课程列表，而不是误导性地显示空课程库。
+`NEXT_PUBLIC_PERSISTENCE` 是**编译期开关**，会打进浏览器 bundle。Compose 默认将它设为 `1`；只有明确需要纯浏览器部署时才设为 `0`。默认 `DATABASE_URL` 会连接内置 PostgreSQL，也可在 `.env.local` 中改为外部数据库。
 
-> [!WARNING]
-> `PERSISTENCE_DEV_TOKEN` / `NEXT_PUBLIC_PERSISTENCE_TOKEN` **不是严格意义上的密钥**：`NEXT_PUBLIC_` token 会被编译进公开的 JavaScript，任何访客都能提取它并指定任意 `x-learner-key`，从而读写**所有**学习者的分区和文档。它只用于把无关的网络扫描器挡在可信网络的端点之外。**该模式仅适用于 localhost 或可信网络下的单用户部署。**生产环境请将 [`lib/persistence/server-auth.ts`](lib/persistence/server-auth.ts) 替换为真正的会话校验，由服务端身份推导学习者分区，并相应调整文档/合并/管理端的授权策略。
-
-`PERSISTENCE_POSTGRES_PASSWORD` 只在数据目录为空时初始化 PostgreSQL 角色，之后再修改不会轮换已有的 `openmaic-postgres` 卷。一次性本地库可以直接 `docker compose --profile server-persistence down -v` 后换密码重启；要保留数据则需以管理员执行 `ALTER ROLE openmaic WITH PASSWORD 'new-password';` 并更新 `DATABASE_URL`。
+`PERSISTENCE_POSTGRES_PASSWORD` 只在数据目录为空时初始化 PostgreSQL 角色，之后再修改不会轮换已有的 `openmaic-postgres` 卷。一次性本地库可以直接 `docker compose down -v` 后换密码重启；要保留数据则需以管理员执行 `ALTER ROLE openmaic WITH PASSWORD 'new-password';` 并更新 `DATABASE_URL`。
 
 资产的删除/替换只移除注册中心条目，底层字节随后由离线回收器清理。**本部署默认开启回收器**，资产存储不会无限增长：每 `ASSET_COLLECTION_INTERVAL_MS`（默认 15 分钟）执行一轮，清理已解除引用超过 `ASSET_COLLECTION_GRACE_MS`（默认 1 小时）的字节——grace period 就是用户删除的字节实际的保留窗口，调大请谨慎。设置 `ASSET_COLLECTION_ENABLED=0` 可在某个进程中关闭回收。多实例部署可以在每个实例上开启（每个 blob 行在被清理前会加锁并复查，并发回收器会串行化而非竞争），也可以全部关闭后单独运行。
 
@@ -355,10 +351,10 @@ NEXT_PUBLIC_PERSISTENCE=1 NEXT_PUBLIC_PERSISTENCE_TOKEN=openmaic-local-dev docke
 
 “导出视频”菜单在浏览器内构建一个自包含的 [Hyperframes](https://www.npmjs.com/package/@hyperframes/producer) 项目。要把它变成 MP4 需要 Chromium + FFmpeg（Node 22），因此运行在独立的 `render-service` 容器中，而不在应用内。
 
-它是可选的，通过 `video-export` compose profile 启动：
+默认 Compose 栈会启动视频导出服务：
 
 ```bash
-docker compose --profile video-export up --build
+docker compose up -d --build
 ```
 
 

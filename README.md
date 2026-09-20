@@ -350,58 +350,35 @@ the cache only improves performance and is not required for a correct build.
 
 ### Server-backed persistence (PostgreSQL)
 
-The `server-persistence` profile runs exactly two containers: the OpenMAIC app
-and PostgreSQL. The persistence HTTP server is embedded in the app at
+The default Compose stack runs the OpenMAIC app, PostgreSQL, and the video-render
+service. The persistence HTTP server is embedded in the app at
 `/api/persistence`; there is no standalone persistence service.
 
 ```bash
-cp .env.example .env.local
-printf '\nDATABASE_URL=postgres://openmaic:openmaic-dev@postgres:5432/openmaic\nPERSISTENCE_DEV_TOKEN=openmaic-local-dev\n' >> .env.local
-NEXT_PUBLIC_PERSISTENCE=1 NEXT_PUBLIC_PERSISTENCE_TOKEN=openmaic-local-dev docker compose --profile server-persistence up --build
+docker compose up -d --build
 ```
 
 Add your provider API keys to `.env.local` as usual. Runtime sessions and course
 documents become server-backed; device-scoped KV data (including the anonymous
 device learner key and playback position) remains in the browser. Existing
-browser course data is copied into the configured server store lazily, one
-course at a time when it is first accessed, using the same verified migration
-path as browser persistence.
+browser course data is copied into the configured server store after sign-in.
+Server copies are never overwritten by a stale local copy.
 
-`NEXT_PUBLIC_PERSISTENCE` is a **build-time switch** compiled into the browser
-bundle. A build with it enabled must be deployed with a working runtime
-`DATABASE_URL` and `PERSISTENCE_DEV_TOKEN`, while
-`NEXT_PUBLIC_PERSISTENCE_TOKEN` must match that server token at build time.
-Otherwise the browser selects HTTP persistence but the embedded endpoint
-returns configuration/authentication/initialization errors; the home page shows
-a persistence-unavailable toast and keeps the prior course list instead of
-misleadingly displaying an empty library.
-
-`PERSISTENCE_DEV_TOKEN` and `NEXT_PUBLIC_PERSISTENCE_TOKEN` are **not a
-secret in any meaningful sense**: the `NEXT_PUBLIC_` token is compiled into
-the public JavaScript bundle, fully visible to every visitor, and therefore
-provides **no confidentiality and no user isolation whatsoever** — anyone who
-can load the page can extract it and read or write **every** learner partition
-and **all** documents by choosing an `x-learner-key`. Its only purpose is to
-keep unrelated network scanners out of an endpoint on a trusted network. This
-is suitable only for localhost or trusted-network, single-user deployments. Before production,
-replace
-[`lib/persistence/server-auth.ts`](lib/persistence/server-auth.ts) with real
-session verification that derives the learner partition from server-controlled
-identity, and change the document/merge/admin authorization policies as
-appropriate.
+`NEXT_PUBLIC_PERSISTENCE=1` is the default Compose build setting. It is a
+**build-time switch**, so set it to `0` only when intentionally deploying a
+browser-only instance. The default `DATABASE_URL` targets the included
+PostgreSQL service; override it in `.env.local` for an external database.
 
 `PERSISTENCE_POSTGRES_PASSWORD` initializes the PostgreSQL role only when the
 data directory is empty; changing it later does not rotate an existing
 `openmaic-postgres` volume. For a disposable local database, run
-`docker compose --profile server-persistence down -v`, set the new password and
-matching `DATABASE_URL`, then start the profile again. To preserve data, connect
+`docker compose down -v`, set the new password and matching `DATABASE_URL`,
+then start the stack again. To preserve data, connect
 as an administrator and run `ALTER ROLE openmaic WITH PASSWORD 'new-password';`,
 then update `DATABASE_URL`.
 
-Compose cannot attach `depends_on` to `openmaic` only when this optional profile
-is active without also affecting the default deployment. Startup therefore
-relies on the embedded route's retry-on-next-request behavior while PostgreSQL
-becomes healthy.
+Startup relies on the embedded route's retry-on-next-request behavior while
+PostgreSQL becomes healthy.
 
 Deleting or replacing an asset only drops its registry entry; the bytes behind
 it are reclaimed afterwards by an offline collector. **This deployment runs that
@@ -481,17 +458,14 @@ Without these opt-ins, OpenMAIC retains its existing browser-only behavior.
 Runner cadence (scan interval, heartbeat, lease TTL, concurrency, attempts) and
 the reserved compaction knobs are listed in `.env.example`.
 
-### Optional: MP4 Video Export (Render Service)
+### MP4 Video Export (Render Service)
 
 The "Export Video" menu builds a self-contained [Hyperframes](https://www.npmjs.com/package/@hyperframes/producer) project entirely in the browser. Turning that into an MP4 needs Chromium + FFmpeg on Node 22, so it runs in an isolated `render-service` container rather than the app.
 
-It's opt-in. Start it with the `video-export` compose profile:
-
-```bash
-docker compose --profile video-export up --build
-```
-
-The app auto-detects the service via `RENDER_SERVICE_URL` (preset in `docker-compose.yml`) and enables one-click MP4 rendering. Without the profile — or when `RENDER_SERVICE_URL` is unset — export degrades to downloading the project ZIP for local CLI rendering. See [`render-service/README.md`](render-service/README.md) for standalone setup and tuning (`RENDER_MAX_CONCURRENCY`, etc.).
+The default Compose stack starts the render service. The app auto-detects it via
+`RENDER_SERVICE_URL` (preset in `docker-compose.yml`) and enables one-click MP4
+rendering. See [`render-service/README.md`](render-service/README.md) for
+standalone setup and tuning (`RENDER_MAX_CONCURRENCY`, etc.).
 
 ### Optional: MinerU (Advanced Document Parsing)
 
@@ -1059,4 +1033,4 @@ When redistributing the repository as a whole, the terms of each bundled package
 
 
 
-docker compose --profile server-persistence --profile video-export up -d --build
+docker compose up -d --build

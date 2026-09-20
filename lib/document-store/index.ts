@@ -23,6 +23,7 @@ export {
 } from './store';
 export {
   accessDocument,
+  migrateBrowserDocuments,
   documentLockName,
   getLegacyDocumentStore,
   mutateDocument,
@@ -32,6 +33,8 @@ export {
   type AssetRefConverter,
   type DocumentAccessResult,
   type DocumentMigrationDeps,
+  type BrowserDocumentMigrationDeps,
+  type BrowserDocumentMigrationResult,
   type LegacyDocumentSnapshot,
   type LegacyDocumentStore,
 } from './migration';

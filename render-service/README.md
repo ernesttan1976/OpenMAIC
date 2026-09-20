@@ -175,11 +175,11 @@ no outbound access.
 
 ### Docker (recommended)
 
-The root `docker-compose.yml` wires this service under the `video-export`
-profile and points the app at it:
+The root `docker-compose.yml` includes this service in the default stack and
+points the app at it:
 
 ```bash
-docker compose --profile video-export up --build
+docker compose up -d --build
 ```
 
 ### Standalone (development)
@@ -216,7 +216,7 @@ render, and one extraction, and requires at least 4 GiB:
 ```bash
 RENDER_RESOURCE_PROFILE=low-memory \
 RENDER_SERVICE_MEMORY_LIMIT=4g \
-docker compose --profile video-export up --build
+docker compose up -d --build
 ```
 
 Both `/health` and `GET /render/:jobId` make the selection observable. Health

@@ -11,6 +11,7 @@ import { describe, expect, test, vi } from 'vitest';
 
 import {
   accessDocument,
+  migrateBrowserDocuments,
   migrateDocumentForVerification,
   mutateDocument,
   type LegacyDocumentSnapshot,
@@ -170,6 +171,60 @@ function store(idb = new IDBFactory()): DocumentStore<AppScene> {
 }
 
 describe('legacy document migration', () => {
+  test('copies every current IndexedDB document without replacing a server copy', async () => {
+    const idb = new IDBFactory();
+    const source = new BrowserDocumentStore<AppScene>({
+      indexedDB: idb,
+      dbName: 'browser-source',
+      validateScene: () => ({ valid: true }),
+    });
+    const destination = new BrowserDocumentStore<AppScene>({
+      indexedDB: idb,
+      dbName: 'server-destination',
+      validateScene: () => ({ valid: true }),
+    });
+    const sourceDocument = {
+      stage: {
+        id: 'stage-1',
+        name: 'Local classroom',
+        createdAt: 100,
+        updatedAt: 200,
+      },
+      scenes: [],
+    } as AppDocument;
+    await source.saveDocument(sourceDocument);
+
+    const result = await migrateBrowserDocuments({
+      sourceStore: source,
+      store: destination,
+      kv: new MemoryKv(),
+      legacyStore: legacy(null),
+      lockManager: lockManager(),
+    });
+
+    expect(result).toMatchObject({ migrated: 1, alreadyPresent: 0, failedStageIds: [] });
+    expect(await destination.loadDocument('stage-1')).toMatchObject({
+      stage: { name: 'Local classroom' },
+    });
+
+    await source.saveDocument({
+      ...sourceDocument,
+      stage: { ...sourceDocument.stage, name: 'Newer local classroom' },
+    });
+    const second = await migrateBrowserDocuments({
+      sourceStore: source,
+      store: destination,
+      kv: new MemoryKv(),
+      legacyStore: legacy(null),
+      lockManager: lockManager(),
+    });
+
+    expect(second).toMatchObject({ migrated: 0, alreadyPresent: 1, failedStageIds: [] });
+    expect(await destination.loadDocument('stage-1')).toMatchObject({
+      stage: { name: 'Local classroom' },
+    });
+  });
+
   test('keeps the opaque outline outside the migration verification baseline', () => {
     const outline = {
       outlines: [],

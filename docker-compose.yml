@@ -5,11 +5,10 @@ services:
       args:
         - ALPINE_MIRROR=${ALPINE_MIRROR:-}
         - NPM_REGISTRY=${NPM_REGISTRY:-}
-        # NEXT_PUBLIC_* values are compiled into the browser bundle. Leave them
-        # empty unless the corresponding client feature is explicitly enabled;
-        # persistence and other build-time flags can be supplied on the command line.
+        # NEXT_PUBLIC_* values are compiled into the browser bundle. Persistence
+        # is enabled by default; other optional client features stay opt-in.
         - ALLOWED_FRAME_ANCESTORS=${ALLOWED_FRAME_ANCESTORS:-}
-        - NEXT_PUBLIC_PERSISTENCE=${NEXT_PUBLIC_PERSISTENCE:-}
+        - NEXT_PUBLIC_PERSISTENCE=${NEXT_PUBLIC_PERSISTENCE:-1}
         - NEXT_PUBLIC_PERSISTENCE_TOKEN=${NEXT_PUBLIC_PERSISTENCE_TOKEN:-}
         - NEXT_PUBLIC_MAIC_EDITOR_ENABLED=${NEXT_PUBLIC_MAIC_EDITOR_ENABLED:-}
         - NEXT_PUBLIC_MAIC_EDITOR_RENDERER_ENABLED=${NEXT_PUBLIC_MAIC_EDITOR_RENDERER_ENABLED:-}
@@ -25,12 +24,10 @@ services:
     env_file:
       - .env.local
     environment:
-      # Point the app at the render service when it's running. This wins over any
-      # RENDER_SERVICE_URL in .env.local; the service only starts under the
-      # "video-export" profile. The app's capability check probes the service's
-      # /health, so if the profile is off (service absent) the app reports the
-      # MP4 export disabled and degrades to the ZIP-download path — this URL
-      # being set does not, by itself, advertise a working render.
+      # Server-backed documents are the default deployment mode.
+      - DATABASE_URL=${DATABASE_URL:-postgres://openmaic:openmaic-dev@postgres:5432/openmaic}
+      # The render service is part of the default stack. The capability check
+      # probes /health before advertising MP4 rendering.
       - RENDER_SERVICE_URL=http://render-service:9000
     networks:
       - default # outbound internet (LLM/media provider APIs, etc.)
@@ -42,13 +39,9 @@ services:
       - openmaic-data:/app/data
     restart: unless-stopped
 
-  # Optional PostgreSQL backing for the app-embedded persistence API.
-  # The app reads DATABASE_URL and PERSISTENCE_DEV_TOKEN from .env.local; keeping
-  # those values there avoids changing the default browser-only deployment.
+  # Default PostgreSQL backing for the app-embedded persistence API.
   postgres:
     image: postgres:16
-    profiles:
-      - server-persistence
     environment:
       - POSTGRES_DB=openmaic
       - POSTGRES_USER=openmaic
@@ -67,10 +60,7 @@ services:
     ports:
       - "5434:5432"
   # Isolated MP4 render service (Node 22 + Chromium + FFmpeg) for classroom video
-  # export (issue #866). Opt-in: only starts with `--profile video-export`, since
-  # the image is heavy (bundles Chromium + FFmpeg) and the capability is optional.
-  #
-  #   docker compose --profile video-export up --build
+  # export (issue #866). It starts with the default stack.
   #
   # Sits on the `render` network (`internal: true`, no host/internet gateway).
   # It shares that network with `openmaic` only so the app can reach it; to stop
@@ -81,8 +71,6 @@ services:
   # the render needs no outbound at all.
   render-service:
     build: ./render-service
-    profiles:
-      - video-export
     expose:
       - '9000'
     # Required for the entrypoint's iptables egress lockdown. Without it the

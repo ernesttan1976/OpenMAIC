@@ -54,6 +54,18 @@ export interface DocumentMigrationDeps {
   storageSharedLockHeld?: boolean;
 }
 
+/** Dependencies for copying this browser's current document store to the configured destination. */
+export interface BrowserDocumentMigrationDeps extends DocumentMigrationDeps {
+  /** The browser's pre-server-persistence IndexedDB document store. */
+  sourceStore: DocumentStore<AppScene, AppStage>;
+}
+
+export interface BrowserDocumentMigrationResult {
+  migrated: number;
+  alreadyPresent: number;
+  failedStageIds: string[];
+}
+
 export interface DocumentMutationOptions {
   /**
    * A wholesale replacement (import, backup restore) overwrites the whole
@@ -646,6 +658,73 @@ export async function accessDocument(
       readOnlyLegacy: true,
     };
   }
+}
+
+/**
+ * Copy every local IndexedDB classroom into the configured store once it is
+ * available. A document already present on the server always wins: it may have
+ * been edited from another device after this browser's local copy was written.
+ * Legacy Dexie-only classrooms continue through the verified lazy migration
+ * path, but are swept here as well so users do not need to open them one-by-one.
+ */
+export async function migrateBrowserDocuments(
+  deps: BrowserDocumentMigrationDeps,
+): Promise<BrowserDocumentMigrationResult> {
+  const result: BrowserDocumentMigrationResult = {
+    migrated: 0,
+    alreadyPresent: 0,
+    failedStageIds: [],
+  };
+  const destination = resolveStore(deps);
+  let sourceIds = new Set<string>();
+
+  try {
+    const summaries = await deps.sourceStore.listDocuments();
+    sourceIds = new Set(summaries.map((summary) => summary.id));
+    for (const { id: stageId } of summaries) {
+      try {
+        await withDocumentLock(
+          stageId,
+          async () => {
+            if (await destination.loadDocument(stageId)) {
+              result.alreadyPresent += 1;
+              return;
+            }
+            const source = await deps.sourceStore.loadDocument(stageId);
+            if (!source) return;
+            await destination.saveDocument(source);
+            const copied = await destination.loadDocument(stageId);
+            if (!copied) throw new Error(`Browser migration lost document ${JSON.stringify(stageId)}`);
+            assertMigrationVerified(source, copied, deps.migrateDsl);
+            result.migrated += 1;
+          },
+          deps,
+        );
+      } catch (error) {
+        result.failedStageIds.push(stageId);
+        log.warn(`Browser document migration failed for stage ${stageId}`, error);
+      }
+    }
+  } catch (error) {
+    log.warn('Browser document migration could not enumerate local documents', error);
+  }
+
+  try {
+    const legacy = getLegacyDocumentStore(deps);
+    for (const { id: stageId } of await legacy.listStages()) {
+      if (sourceIds.has(stageId)) continue;
+      try {
+        const access = await accessDocument(stageId, { ...deps, legacyStore: legacy });
+        if (access.document) result.migrated += 1;
+      } catch (error) {
+        result.failedStageIds.push(stageId);
+        log.warn(`Legacy browser document migration failed for stage ${stageId}`, error);
+      }
+    }
+  } catch (error) {
+    log.warn('Browser document migration could not enumerate legacy documents', error);
+  }
+  return result;
 }
 
 /** Aggregate mutation entry point; migration and the caller's RMW share one lock. */
