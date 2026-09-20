@@ -1632,7 +1632,7 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
           />
 
         {/* Main Content Area */}
-          <div className="flex-1 flex flex-col overflow-hidden min-w-0 relative max-lg:order-1 max-lg:flex-none max-lg:h-svh">
+          <div className="flex-1 flex flex-col overflow-hidden min-w-0 relative max-lg:order-1 max-lg:flex-none max-lg:h-svh max-lg:overflow-y-auto">
           {/* Header — playback only. The Pro Switch fires `onEnterProMode`
             (passed by the parent Stage) which awaits our `teardown()`
             before the parent flips mode to 'edit'. */}
