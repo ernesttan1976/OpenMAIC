@@ -390,6 +390,8 @@ export function HeaderControls({
         </DropdownMenuContent>
       </DropdownMenu>
 
+      <div id="header-account-actions" className="flex items-center gap-2" />
+
       <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
       {videoExportEnabled && (
         <VideoExportDialog open={videoDialogOpen} onOpenChange={setVideoDialogOpen} />

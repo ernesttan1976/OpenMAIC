@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { HeaderActionPortal } from '@/components/header-action-portal';
 
 export function CollaboratorManager({ stageId }: { stageId: string }) {
   const [open, setOpen] = useState(false);
@@ -24,28 +25,48 @@ export function CollaboratorManager({ stageId }: { stageId: string }) {
   }
 
   return (
-    <div className="absolute right-4 top-4 z-50">
-      <button className="rounded-md bg-background/90 px-3 py-2 text-sm shadow" onClick={() => setOpen(!open)}>
-        Share
-      </button>
-      {open && (
-        <form
-          className="mt-2 w-80 rounded-md bg-background p-3 shadow-lg"
-          onSubmit={(event) => {
-            event.preventDefault();
-            void invite();
-          }}
+    <HeaderActionPortal fallbackClassName="fixed right-4 top-4 z-50">
+      <div className="order-1 relative">
+        <button
+          className="rounded-md bg-background/90 px-3 py-2 text-sm shadow"
+          onClick={() => setOpen(!open)}
         >
-          <label className="mb-1 block text-sm font-medium" htmlFor="collaborator-email">Google email</label>
-          <input id="collaborator-email" className="mb-2 w-full rounded border p-2" type="email" value={email} onChange={(event) => setEmail(event.target.value)} required />
-          <select className="mb-2 w-full rounded border p-2" value={role} onChange={(event) => setRole(event.target.value as 'viewer' | 'editor')}>
-            <option value="viewer">Viewer</option>
-            <option value="editor">Editor</option>
-          </select>
-          <button className="rounded bg-primary px-3 py-2 text-sm text-primary-foreground" type="submit">Invite</button>
-          {message && <p className="mt-2 text-xs text-muted-foreground">{message}</p>}
-        </form>
-      )}
-    </div>
+          Share
+        </button>
+        {open && (
+          <form
+            className="absolute right-0 top-full mt-2 w-80 rounded-md bg-background p-3 shadow-lg"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void invite();
+            }}
+          >
+            <label className="mb-1 block text-sm font-medium" htmlFor="collaborator-email">
+              Google email
+            </label>
+            <input
+              id="collaborator-email"
+              className="mb-2 w-full rounded border p-2"
+              type="email"
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+              required
+            />
+            <select
+              className="mb-2 w-full rounded border p-2"
+              value={role}
+              onChange={(event) => setRole(event.target.value as 'viewer' | 'editor')}
+            >
+              <option value="viewer">Viewer</option>
+              <option value="editor">Editor</option>
+            </select>
+            <button className="rounded bg-primary px-3 py-2 text-sm text-primary-foreground" type="submit">
+              Invite
+            </button>
+            {message && <p className="mt-2 text-xs text-muted-foreground">{message}</p>}
+          </form>
+        )}
+      </div>
+    </HeaderActionPortal>
   );
 }
