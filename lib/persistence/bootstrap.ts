@@ -1,5 +1,4 @@
 import {
-  BrowserKVStore,
   HttpAssetStore,
   HttpDocumentStore,
   type HttpAssetHeadersHook,
@@ -18,9 +17,7 @@ import {
   type AssetPoolStorageOptions,
 } from '@/lib/media/asset-pool-config';
 import { assertRuntimeStorageConfigurable, configureRuntimeStorage } from '@/lib/runtime/config';
-import { getLearnerKey } from '@/lib/runtime/learner-key';
 
-let deviceKv: BrowserKVStore | undefined;
 let learnerKeyPromise: Promise<string> | undefined;
 
 export function isBrowserPersistenceEnabled(): boolean {
@@ -31,12 +28,20 @@ export function getPersistenceLearnerKey(): Promise<string> {
   if (!isBrowserPersistenceEnabled()) {
     return Promise.reject(new Error('Browser persistence is not enabled'));
   }
-  return (learnerKeyPromise ??= getLearnerKey((deviceKv ??= new BrowserKVStore())).catch(
-    (error) => {
+  learnerKeyPromise ??= fetch('/api/auth/me', { cache: 'no-store' })
+    .then(async (response) => {
+      if (!response.ok) throw new Error('Unable to resolve the authenticated user');
+      const body: unknown = await response.json();
+      if (!body || typeof body !== 'object' || typeof (body as { id?: unknown }).id !== 'string') {
+        throw new Error('Authenticated user response did not include an ID');
+      }
+      return (body as { id: string }).id;
+    })
+    .catch((error) => {
       learnerKeyPromise = undefined;
       throw error;
-    },
-  ));
+    });
+  return learnerKeyPromise;
 }
 
 export async function getPersistenceRequestHeaders(): Promise<Record<string, string>> {

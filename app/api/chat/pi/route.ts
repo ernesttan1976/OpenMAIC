@@ -26,10 +26,10 @@ import { apiError } from '@/lib/server/api-response';
 import type { ThinkingConfig } from '@/lib/types/provider';
 import type { StatelessChatRequest } from '@/lib/types/chat';
 import { resolveClassroomWebSearchConfig } from '@/lib/server/web-search-config';
-import { authenticatePersistenceHeaders } from '@/lib/persistence/server-auth';
 import { getServerPersistenceProvider } from '@/lib/persistence/server-provider';
 import { createWhiteboardRuntimeService } from '@/lib/whiteboard/runtime/store';
 import { hasNativeWhiteboardAction } from '@/lib/chat/pi/tools/native-whiteboard';
+import { getRequestUser } from '@/lib/auth/request-user';
 import {
   ELEMENT_REFERENCE_ACCEPTED_HEADER,
   ElementReferenceValidationError,
@@ -172,11 +172,10 @@ export async function POST(req: NextRequest) {
       nativeWhiteboardRequested &&
       validRequestStartStageId &&
       process.env.NEXT_PUBLIC_PERSISTENCE === '1' &&
-      process.env.DATABASE_URL &&
-      process.env.PERSISTENCE_DEV_TOKEN
+      process.env.DATABASE_URL
     ) {
-      const principal = authenticatePersistenceHeaders(req.headers);
-      const learnerKey = principal?.learnerKey;
+      const user = await getRequestUser(req);
+      const learnerKey = user?.id;
       if (learnerKey && learnerKey === learnerKey.trim()) {
         try {
           const provider = await getServerPersistenceProvider(process.env.DATABASE_URL);

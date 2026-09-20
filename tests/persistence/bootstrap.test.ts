@@ -38,6 +38,10 @@ describe('persistence client bootstrap', () => {
     vi.stubEnv('NEXT_PUBLIC_PERSISTENCE_TOKEN', 'test-dev-token');
     vi.stubGlobal('window', {});
     vi.stubGlobal('localStorage', memoryStorage());
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(Response.json({ id: 'user-123' })),
+    );
 
     const { HttpAssetStore, HttpDocumentStore } = await import('@openmaic/storage');
     const { HttpRuntimeStore } = await import('@openmaic/storage/runtime/http');
@@ -74,7 +78,7 @@ describe('persistence client bootstrap', () => {
 
     const runtimeHeaders = await headersOf(runtimeStore, '/runtime/sessions/example');
     expect(runtimeHeaders.get('authorization')).toBe('Bearer test-dev-token');
-    expect(runtimeHeaders.get('x-learner-key')).toMatch(/^anon:/);
+    expect(runtimeHeaders.get('x-learner-key')).toBe('user-123');
 
     // The asset pool is a server-backed pool over the same endpoint, carrying
     // the same credentials the document store carries. Anything less and the

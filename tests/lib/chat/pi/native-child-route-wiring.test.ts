@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   streamLLM: vi.fn(),
   searchWeb: vi.fn(),
   getServerPersistenceProvider: vi.fn(),
+  getRequestUser: vi.fn().mockResolvedValue({ id: 'learner-route-test' }),
 }));
 
 vi.mock('@/lib/server/resolve-model', () => ({ resolveModel: mocks.resolveModel }));
@@ -27,6 +28,7 @@ vi.mock('@/lib/live-mode', () => ({ isLiveMode: false }));
 vi.mock('@/lib/persistence/server-provider', () => ({
   getServerPersistenceProvider: mocks.getServerPersistenceProvider,
 }));
+vi.mock('@/lib/auth/request-user', () => ({ getRequestUser: mocks.getRequestUser }));
 vi.mock('@/lib/logger', () => ({
   createLogger: () => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() }),
 }));
@@ -165,6 +167,8 @@ describe('PR2 Native Child route production wiring', () => {
     mocks.streamLLM.mockReset();
     mocks.searchWeb.mockReset();
     mocks.getServerPersistenceProvider.mockReset();
+    mocks.getRequestUser.mockReset();
+    mocks.getRequestUser.mockResolvedValue({ id: 'learner-route-test' });
     mocks.getServerPersistenceProvider.mockResolvedValue({
       runtimeStore: new BrowserRuntimeStore({
         indexedDB: new IDBFactory(),
@@ -560,9 +564,10 @@ describe('PR2 Native Child route production wiring', () => {
         }),
     },
     {
-      name: 'a missing learner binding',
-      request: () =>
-        makeRequest(
+      name: 'an unauthenticated user',
+      request: () => {
+        mocks.getRequestUser.mockResolvedValueOnce(null);
+        return makeRequest(
           {
             config: {
               agentIds: ['teacher-1'],
@@ -581,8 +586,8 @@ describe('PR2 Native Child route production wiring', () => {
               ],
             },
           },
-          { authorization: 'Bearer persistence-test-token' },
-        ),
+        );
+      },
     },
   ])('keeps the Native WB bundle absent for $name', async ({ request }) => {
     process.env.NEXT_PUBLIC_PERSISTENCE = '1';

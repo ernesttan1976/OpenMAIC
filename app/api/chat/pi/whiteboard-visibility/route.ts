@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server';
 
 import { settleWhiteboardVisibility } from '@/lib/chat/pi/whiteboard-visibility';
-import { authenticatePersistenceHeaders } from '@/lib/persistence/server-auth';
+import { getRequestUser } from '@/lib/auth/request-user';
 import { apiError } from '@/lib/server/api-response';
 
 export const runtime = 'nodejs';
@@ -29,9 +29,9 @@ function validBody(value: unknown): value is {
 }
 
 export async function POST(req: NextRequest): Promise<Response> {
-  const principal = authenticatePersistenceHeaders(req.headers);
-  if (!principal?.learnerKey) {
-    return apiError('INVALID_CREDENTIALS', 401, 'Invalid persistence development binding');
+  const user = await getRequestUser(req);
+  if (!user) {
+    return apiError('INVALID_CREDENTIALS', 401, 'Authentication required');
   }
 
   let body: unknown;
@@ -47,7 +47,7 @@ export async function POST(req: NextRequest): Promise<Response> {
   if (
     !settleWhiteboardVisibility({
       ...body,
-      learnerKey: principal.learnerKey,
+      learnerKey: user.id,
     })
   ) {
     return apiError('INVALID_REQUEST', 404, 'Whiteboard visibility query is not pending here');

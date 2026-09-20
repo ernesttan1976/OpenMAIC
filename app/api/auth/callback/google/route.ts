@@ -1,7 +1,7 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { NextRequest, NextResponse } from 'next/server';
 
-import { createOpaqueToken, createSessionCookie, sessionCookieHeader } from '@/lib/auth/session';
+import { AUTH_SESSION_COOKIE, createOpaqueToken, createSessionCookie } from '@/lib/auth/session';
 import { authDebug, authDebugError, isAuthDebugEnabled } from '@/lib/auth/debug';
 import { createUserSession, upsertGoogleUser } from '@/lib/auth/users';
 
@@ -82,7 +82,13 @@ export async function GET(request: NextRequest) {
       sessionCookieSecure: process.env.NODE_ENV === 'production',
     });
     const response = NextResponse.redirect(new URL('/', base));
-    response.headers.append('Set-Cookie', sessionCookieHeader(session.value));
+    response.cookies.set(AUTH_SESSION_COOKIE, session.value, {
+      httpOnly: true,
+      sameSite: 'lax',
+      secure: process.env.NODE_ENV === 'production',
+      maxAge: 7 * 24 * 60 * 60,
+      path: '/',
+    });
     response.cookies.set('openmaic_oauth_state', '', { maxAge: 0, path: '/' });
     return response;
   } catch (error) {

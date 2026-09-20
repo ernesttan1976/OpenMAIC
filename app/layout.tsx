@@ -15,6 +15,7 @@ import { ProSwapWatcher } from '@/components/workbench/ProSwapWatcher';
 import { getRequestUser } from '@/lib/auth/request-user';
 import { isAuthDebugEnabled } from '@/lib/auth/debug';
 import { AuthDebug } from '@/components/auth-debug';
+import { AccountMenu } from '@/components/account-menu';
 import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 
@@ -56,6 +57,7 @@ export default async function RootLayout({
           <I18nProvider>
             <ServerProvidersInit />
             {isAuthDebugEnabled() && <AuthDebug />}
+            <AccountMenu user={user} />
             <ProSwapWatcher />
             <AccessCodeGuard>{children}</AccessCodeGuard>
             <Toaster position="top-center" />

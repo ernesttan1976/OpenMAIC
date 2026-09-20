@@ -64,7 +64,8 @@ services:
     volumes:
       - openmaic-postgres:/var/lib/postgresql/data
     restart: unless-stopped
-
+    ports:
+      - "5434:5432"
   # Isolated MP4 render service (Node 22 + Chromium + FFmpeg) for classroom video
   # export (issue #866). Opt-in: only starts with `--profile video-export`, since
   # the image is heavy (bundles Chromium + FFmpeg) and the capability is optional.
