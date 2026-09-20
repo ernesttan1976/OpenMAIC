@@ -49,8 +49,10 @@ export function Header({
 
   return (
     <>
-      <header className="h-10 lg:h-20 px-8 flex items-center justify-between z-10 bg-transparent gap-4">
-        <div className="flex items-center gap-3 min-w-0 flex-1">
+      <header
+        className="h-10 max-md:h-6 lg:h-20 px-8 max-md:px-[19px] flex items-center justify-between z-10 bg-transparent gap-4 max-md:gap-[10px]"
+      >
+        <div className="flex items-center gap-3 min-w-0 flex-1 origin-left max-md:scale-[0.6]">
           {hideBackControl
             ? null
             : (backControl ?? (
@@ -89,14 +91,16 @@ export function Header({
 
         {/* Standalone classroom keeps the full cluster. Workbench-attached
             classrooms omit both the global capsule and course share/export. */}
-        <HeaderControls
-          mode={mode}
-          proModeActive={proModeActive}
-          canEdit={canEdit}
-          onToggleEditMode={onToggleEditMode}
-          showGlobalControls={!hideGlobalControls}
-          showCourseActions={!hideCourseActions}
-        />
+        <div className="shrink-0 origin-right max-md:scale-[0.6]">
+          <HeaderControls
+            mode={mode}
+            proModeActive={proModeActive}
+            canEdit={canEdit}
+            onToggleEditMode={onToggleEditMode}
+            showGlobalControls={!hideGlobalControls}
+            showCourseActions={!hideCourseActions}
+          />
+        </div>
       </header>
     </>
   );
