@@ -25,6 +25,7 @@ import { PENDING_SCENE_ID } from '@/lib/store/stage';
 interface SceneSidebarProps {
   readonly collapsed: boolean;
   readonly onCollapseChange: (collapsed: boolean) => void;
+  readonly className?: string;
   readonly onSceneSelect?: (sceneId: string) => void;
   readonly onRetryOutline?: (outlineId: string) => Promise<void>;
   readonly isCourseComplete?: boolean;
@@ -37,6 +38,7 @@ const MAX_WIDTH = 400;
 export function SceneSidebar({
   collapsed,
   onCollapseChange,
+  className,
   onSceneSelect,
   onRetryOutline,
   isCourseComplete,
@@ -111,7 +113,10 @@ export function SceneSidebar({
         width: displayWidth,
         transition: isDraggingRef.current ? 'none' : 'width 0.3s ease',
       }}
-      className="bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl border-r border-gray-100 dark:border-gray-800 shadow-[2px_0_24px_rgba(0,0,0,0.02)] flex flex-col shrink-0 z-20 relative overflow-visible"
+      className={cn(
+        'bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl border-r border-gray-100 dark:border-gray-800 shadow-[2px_0_24px_rgba(0,0,0,0.02)] flex flex-col shrink-0 z-20 relative overflow-visible',
+        className,
+      )}
     >
       {/* Drag handle */}
       {!collapsed && (

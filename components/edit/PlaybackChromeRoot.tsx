@@ -182,6 +182,31 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
     const setChatAreaCollapsed = useSettingsStore((s) => s.setChatAreaCollapsed);
     const setTTSMuted = useSettingsStore((s) => s.setTTSMuted);
     const setTTSVolume = useSettingsStore((s) => s.setTTSVolume);
+    const [compactLayout, setCompactLayout] = useState(false);
+    const [compactSidebarCollapsed, setCompactSidebarCollapsed] = useState(true);
+    const [compactChatCollapsed, setCompactChatCollapsed] = useState(true);
+
+    useEffect(() => {
+      const mediaQuery = window.matchMedia('(max-width: 1023px)');
+      const updateLayout = () => {
+        setCompactLayout(mediaQuery.matches);
+        if (mediaQuery.matches) {
+          setCompactSidebarCollapsed(true);
+          setCompactChatCollapsed(true);
+        }
+      };
+
+      updateLayout();
+      mediaQuery.addEventListener('change', updateLayout);
+      return () => mediaQuery.removeEventListener('change', updateLayout);
+    }, []);
+
+    const resolvedSidebarCollapsed = compactLayout ? compactSidebarCollapsed : sidebarCollapsed;
+    const resolvedChatCollapsed = compactLayout ? compactChatCollapsed : chatAreaCollapsed;
+    const updateSidebarCollapsed = compactLayout
+      ? setCompactSidebarCollapsed
+      : setSidebarCollapsed;
+    const updateChatCollapsed = compactLayout ? setCompactChatCollapsed : setChatAreaCollapsed;
 
     // PlaybackEngine state
     const [engineMode, setEngineMode] = useState<EngineMode>('idle');
@@ -610,13 +635,13 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
         // Escape is handled manually in our keydown handler instead
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         await (navigator as any).keyboard?.lock?.(['Escape']).catch(() => {});
-        setSidebarCollapsed(true);
-        setChatAreaCollapsed(true);
+        updateSidebarCollapsed(true);
+        updateChatCollapsed(true);
       } catch {
         // Firefox may deny fullscreen from certain keyboard events (e.g. F11)
         console.warn('[Presentation] Fullscreen request denied — browser policy');
       }
-    }, [setChatAreaCollapsed, setSidebarCollapsed]);
+    }, [updateChatCollapsed, updateSidebarCollapsed]);
 
     useEffect(() => {
       const onFullscreenChange = () => {
@@ -1504,12 +1529,12 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
           case 's':
           case 'S':
             event.preventDefault();
-            setSidebarCollapsed(!sidebarCollapsed);
+            updateSidebarCollapsed(!resolvedSidebarCollapsed);
             break;
           case 'c':
           case 'C':
             event.preventDefault();
-            setChatAreaCollapsed(!chatAreaCollapsed);
+            updateChatCollapsed(!resolvedChatCollapsed);
             break;
           default:
             break;
@@ -1520,7 +1545,6 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
       return () => window.removeEventListener('keydown', onKeyDown);
     }, [
       chatSessionType,
-      chatAreaCollapsed,
       handleNextScene,
       handlePlayPause,
       handlePreviousScene,
@@ -1528,14 +1552,15 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
       isPresentationInteractionActive,
       isPresentationShortcutTarget,
       resetPresentationIdleTimer,
-      setChatAreaCollapsed,
-      setSidebarCollapsed,
       setTTSMuted,
       setTTSVolume,
-      sidebarCollapsed,
+      resolvedChatCollapsed,
+      resolvedSidebarCollapsed,
       togglePresentation,
       ttsMuted,
       ttsVolume,
+      updateChatCollapsed,
+      updateSidebarCollapsed,
     ]);
 
     // Intercept F11 to use our presentation fullscreen instead of browser fullscreen
@@ -1590,20 +1615,24 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
       <div
         ref={stageRef}
         className={cn(
-          'flex-1 flex overflow-hidden bg-gray-50 dark:bg-gray-900',
+          'flex-1 flex overflow-hidden bg-gray-50 dark:bg-gray-900 max-lg:flex-col max-lg:overflow-y-auto',
           isPresenting && !controlsVisible && 'cursor-none',
         )}
       >
-        <SceneSidebar
-          collapsed={sidebarCollapsed}
-          onCollapseChange={setSidebarCollapsed}
-          onSceneSelect={gatedSceneSwitch}
-          onRetryOutline={onRetryOutline}
-          isCourseComplete={isCourseComplete}
-        />
+          <SceneSidebar
+            collapsed={resolvedSidebarCollapsed}
+            onCollapseChange={updateSidebarCollapsed}
+            onSceneSelect={gatedSceneSwitch}
+            onRetryOutline={onRetryOutline}
+            isCourseComplete={isCourseComplete}
+            className={cn(
+              'max-lg:order-2 max-lg:!w-full max-lg:flex-none max-lg:h-[min(50svh,32rem)] max-lg:border-r-0 max-lg:border-t max-lg:shadow-[0_-2px_24px_rgba(0,0,0,0.02)]',
+              resolvedSidebarCollapsed && 'max-lg:hidden',
+            )}
+          />
 
         {/* Main Content Area */}
-        <div className="flex-1 flex flex-col overflow-hidden min-w-0 relative">
+          <div className="flex-1 flex flex-col overflow-hidden min-w-0 relative max-lg:order-1 max-lg:flex-none max-lg:h-svh">
           {/* Header — playback only. The Pro Switch fires `onEnterProMode`
             (passed by the parent Stage) which awaits our `teardown()`
             before the parent flips mode to 'edit'. */}
@@ -1650,10 +1679,10 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
               isSoftClosing={chatIsSoftClosing}
               softCloseDeadline={softCloseDeadline}
               whiteboardOpen={whiteboardOpen}
-              sidebarCollapsed={sidebarCollapsed}
-              chatCollapsed={chatAreaCollapsed}
-              onToggleSidebar={() => setSidebarCollapsed(!sidebarCollapsed)}
-              onToggleChat={() => setChatAreaCollapsed(!chatAreaCollapsed)}
+              sidebarCollapsed={resolvedSidebarCollapsed}
+              chatCollapsed={resolvedChatCollapsed}
+              onToggleSidebar={() => updateSidebarCollapsed(!resolvedSidebarCollapsed)}
+              onToggleChat={() => updateChatCollapsed(!resolvedChatCollapsed)}
               onPrevSlide={handlePreviousScene}
               onNextSlide={handleNextScene}
               onPlayPause={handlePlayPause}
@@ -1831,10 +1860,10 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
                 currentSceneIndex={currentSceneIndex}
                 scenesCount={totalScenesCount}
                 whiteboardOpen={whiteboardOpen}
-                sidebarCollapsed={sidebarCollapsed}
-                chatCollapsed={chatAreaCollapsed}
-                onToggleSidebar={() => setSidebarCollapsed(!sidebarCollapsed)}
-                onToggleChat={() => setChatAreaCollapsed(!chatAreaCollapsed)}
+                sidebarCollapsed={resolvedSidebarCollapsed}
+                chatCollapsed={resolvedChatCollapsed}
+                onToggleSidebar={() => updateSidebarCollapsed(!resolvedSidebarCollapsed)}
+                onToggleChat={() => updateChatCollapsed(!resolvedChatCollapsed)}
                 onPrevSlide={handlePreviousScene}
                 onNextSlide={handleNextScene}
                 onWhiteboardClose={handleWhiteboardToggle}
@@ -1870,13 +1899,17 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
         {/* Chat Area — playback / autonomous always renders it here; Pro
           (edit) mode unmounts this whole PlaybackChromeRoot, so the
           edit branch has no chat. */}
-        <div className="flex shrink-0">
+        <div className="flex shrink-0 max-lg:order-3 max-lg:w-full">
           <ChatArea
             ref={chatAreaRef}
             width={chatAreaWidth}
             onWidthChange={setChatAreaWidth}
-            collapsed={chatAreaCollapsed}
-            onCollapseChange={setChatAreaCollapsed}
+            collapsed={resolvedChatCollapsed}
+            onCollapseChange={updateChatCollapsed}
+            className={cn(
+              'max-lg:!w-full max-lg:flex-none max-lg:h-[min(50svh,32rem)] max-lg:border-l-0 max-lg:border-t max-lg:shadow-[0_-2px_24px_rgba(0,0,0,0.02)]',
+              resolvedChatCollapsed && 'max-lg:hidden',
+            )}
             activeBubbleId={activeBubbleId}
             onActiveBubble={(id) => setActiveBubbleId(id)}
             currentSceneId={currentSceneId}
