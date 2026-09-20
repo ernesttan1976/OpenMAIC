@@ -13,6 +13,8 @@ import { StorageHealthNotice } from '@/components/storage-health-notice';
 import { AccessCodeGuard } from '@/components/access-code-guard';
 import { ProSwapWatcher } from '@/components/workbench/ProSwapWatcher';
 import { getRequestUser } from '@/lib/auth/request-user';
+import { isAuthDebugEnabled } from '@/lib/auth/debug';
+import { AuthDebug } from '@/components/auth-debug';
 import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 
@@ -53,6 +55,7 @@ export default async function RootLayout({
         <ThemeProvider>
           <I18nProvider>
             <ServerProvidersInit />
+            {isAuthDebugEnabled() && <AuthDebug />}
             <ProSwapWatcher />
             <AccessCodeGuard>{children}</AccessCodeGuard>
             <Toaster position="top-center" />

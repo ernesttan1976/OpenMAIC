@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 
+import { authDebug } from '@/lib/auth/debug';
 import { isAgentRuntimeConfigured, isProWorkbenchEnabled } from '@/lib/config/feature-flags';
 
 /** Convert string to Uint8Array */
@@ -23,9 +24,18 @@ function base64UrlToBytes(value: string): Uint8Array {
 async function hasValidSession(request: NextRequest): Promise<boolean> {
   const secret = process.env.AUTH_SECRET;
   const value = request.cookies.get('openmaic_session')?.value;
-  if (!secret || !value) return false;
+  if (!secret || !value) {
+    authDebug('middleware-session-missing', {
+      hasAuthSecret: Boolean(secret),
+      hasSessionCookie: Boolean(value),
+    });
+    return false;
+  }
   const separator = value.lastIndexOf('.');
-  if (separator < 1) return false;
+  if (separator < 1) {
+    authDebug('middleware-session-invalid', { reason: 'malformed-cookie' });
+    return false;
+  }
   const payload = value.slice(0, separator);
   const signature = value.slice(separator + 1);
   const key = await crypto.subtle.importKey(
@@ -45,11 +55,17 @@ async function hasValidSession(request: NextRequest): Promise<boolean> {
     .replace(/\+/g, '-')
     .replace(/\//g, '_')
     .replace(/=+$/, '');
-  if (signature.length !== expected.length || signature !== expected) return false;
+  if (signature.length !== expected.length || signature !== expected) {
+    authDebug('middleware-session-invalid', { reason: 'invalid-signature' });
+    return false;
+  }
   try {
     const parsed = JSON.parse(new TextDecoder().decode(base64UrlToBytes(payload))) as { expiresAt?: unknown };
-    return typeof parsed.expiresAt === 'number' && parsed.expiresAt > Date.now();
+    const valid = typeof parsed.expiresAt === 'number' && parsed.expiresAt > Date.now();
+    if (!valid) authDebug('middleware-session-invalid', { reason: 'expired-or-invalid-payload' });
+    return valid;
   } catch {
+    authDebug('middleware-session-invalid', { reason: 'unreadable-payload' });
     return false;
   }
 }
