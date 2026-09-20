@@ -88,6 +88,8 @@ interface RoundtableProps {
   readonly whiteboardOpen?: boolean;
   readonly sidebarCollapsed?: boolean;
   readonly chatCollapsed?: boolean;
+  readonly compactRoundtableCollapsed?: boolean;
+  readonly onToggleCompactRoundtable?: () => void;
   readonly onToggleSidebar?: () => void;
   readonly onToggleChat?: () => void;
   readonly onPrevSlide?: () => void;
@@ -190,6 +192,8 @@ export function Roundtable({
   whiteboardOpen = false,
   sidebarCollapsed,
   chatCollapsed,
+  compactRoundtableCollapsed,
+  onToggleCompactRoundtable,
   onToggleSidebar,
   onToggleChat,
   onPrevSlide,
@@ -683,6 +687,8 @@ export function Roundtable({
       whiteboardOpen={whiteboardOpen}
       sidebarCollapsed={sidebarCollapsed}
       chatCollapsed={chatCollapsed}
+      roundtableCollapsed={compactRoundtableCollapsed}
+      onToggleRoundtable={onToggleCompactRoundtable}
       onToggleSidebar={onToggleSidebar}
       onToggleChat={onToggleChat}
       onPrevSlide={onPrevSlide ?? (() => {})}
@@ -1139,6 +1145,7 @@ export function Roundtable({
     <div
       className={cn(
         'h-[192px] w-full flex flex-col relative z-10 transition-all duration-300',
+        compactRoundtableCollapsed && 'max-lg:h-8',
         isPresenting && !controlsVisible
           ? 'border-t border-transparent bg-transparent backdrop-blur-none'
           : 'border-t border-gray-100 dark:border-gray-800 bg-white/60 dark:bg-gray-800/60 backdrop-blur-md',
@@ -1154,7 +1161,12 @@ export function Roundtable({
         {toolbar}
       </div>
       {/* ── Interaction area — three-column layout ── */}
-      <div className="flex-1 flex items-stretch min-h-0">
+      <div
+        className={cn(
+          'flex-1 flex items-stretch min-h-0',
+          compactRoundtableCollapsed && 'max-lg:hidden',
+        )}
+      >
         {/* Left: Teacher identity */}
         <div
           className={cn(

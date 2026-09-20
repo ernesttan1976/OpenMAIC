@@ -33,6 +33,8 @@ export interface CanvasToolbarProps {
   readonly whiteboardOpen: boolean;
   readonly sidebarCollapsed?: boolean;
   readonly chatCollapsed?: boolean;
+  readonly roundtableCollapsed?: boolean;
+  readonly onToggleRoundtable?: () => void;
   readonly onToggleSidebar?: () => void;
   readonly onToggleChat?: () => void;
   readonly onPrevSlide: () => void;
@@ -99,6 +101,8 @@ export function CanvasToolbar({
   whiteboardOpen,
   sidebarCollapsed,
   chatCollapsed,
+  roundtableCollapsed,
+  onToggleRoundtable,
   onToggleSidebar,
   onToggleChat,
   onPrevSlide,
@@ -404,6 +408,23 @@ export function CanvasToolbar({
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
+          )}
+
+          {onToggleRoundtable && (
+            <button
+              onClick={onToggleRoundtable}
+              className={cn(
+                ctrlBtn,
+                'hidden max-lg:flex w-6 h-6',
+                roundtableCollapsed
+                  ? 'text-gray-400 dark:text-gray-500'
+                  : 'text-violet-600 dark:text-violet-400',
+              )}
+              aria-label="Toggle discussion panel"
+              aria-pressed={!roundtableCollapsed}
+            >
+              <LayoutList className="w-3.5 h-3.5" />
+            </button>
           )}
 
           {/* Whiteboard */}

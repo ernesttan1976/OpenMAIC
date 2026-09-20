@@ -185,6 +185,7 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
     const [compactLayout, setCompactLayout] = useState(false);
     const [compactSidebarCollapsed, setCompactSidebarCollapsed] = useState(true);
     const [compactChatCollapsed, setCompactChatCollapsed] = useState(true);
+    const [compactRoundtableCollapsed, setCompactRoundtableCollapsed] = useState(true);
 
     useEffect(() => {
       const mediaQuery = window.matchMedia('(max-width: 1023px)');
@@ -193,6 +194,7 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
         if (mediaQuery.matches) {
           setCompactSidebarCollapsed(true);
           setCompactChatCollapsed(true);
+          setCompactRoundtableCollapsed(true);
         }
       };
 
@@ -1863,6 +1865,10 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
                 whiteboardOpen={whiteboardOpen}
                 sidebarCollapsed={resolvedSidebarCollapsed}
                 chatCollapsed={resolvedChatCollapsed}
+                compactRoundtableCollapsed={compactRoundtableCollapsed}
+                onToggleCompactRoundtable={() =>
+                  setCompactRoundtableCollapsed((collapsed) => !collapsed)
+                }
                 onToggleSidebar={() => updateSidebarCollapsed(!resolvedSidebarCollapsed)}
                 onToggleChat={() => updateChatCollapsed(!resolvedChatCollapsed)}
                 onPrevSlide={handlePreviousScene}
