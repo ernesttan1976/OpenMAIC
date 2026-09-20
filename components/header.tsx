@@ -50,7 +50,7 @@ export function Header({
   return (
     <>
       <header
-        className="h-10 max-md:h-6 landscape:h-6 portrait:lg:h-20 px-8 max-md:px-[19px] landscape:px-[19px] max-md:portrait:pt-5 flex items-center justify-between z-10 bg-transparent gap-4 max-md:gap-[10px] landscape:gap-[10px]"
+        className="h-10 max-md:h-6 landscape:h-6 portrait:lg:h-20 px-8 max-md:px-[19px] landscape:px-[19px] flex items-center justify-between z-10 bg-transparent gap-4 max-md:gap-[10px] landscape:gap-[10px]"
       >
         <div className="flex items-center gap-3 min-w-0 flex-1 origin-left max-md:scale-[0.6] landscape:scale-[0.6]">
           {hideBackControl
