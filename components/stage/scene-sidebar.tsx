@@ -128,7 +128,12 @@ export function SceneSidebar({
         </div>
       )}
 
-      <div className={cn('flex flex-col w-full h-full overflow-hidden', collapsed && 'hidden')}>
+      <div
+        className={cn(
+          'flex flex-col w-full h-full overflow-hidden max-lg:landscape:min-h-[800px]',
+          collapsed && 'hidden',
+        )}
+      >
         {/* Logo Header */}
         <div className="h-10 flex items-center justify-between shrink-0 relative mt-3 mb-1 px-3">
           <button
