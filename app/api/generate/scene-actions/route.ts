@@ -32,7 +32,7 @@ import { resolveModelFromRequest } from '@/lib/server/resolve-model';
 
 const log = createLogger('Scene Actions API');
 
-export const maxDuration = 60;
+export const maxDuration = 600;
 
 export async function POST(req: NextRequest) {
   let outlineTitle: string | undefined;
