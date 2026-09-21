@@ -5,7 +5,7 @@
   "buildCommand": "pnpm build",
   "functions": {
     "app/api/**/*.ts": {
-      "maxDuration": 600
+      "maxDuration": 300
     }
   }
 }
