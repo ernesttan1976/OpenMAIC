@@ -79,4 +79,39 @@ describe('LLM dispatcher failure handling', () => {
       globalThis.fetch = originalFetch;
     }
   });
+
+  it('serializes Ollama requests until each response body is consumed', async () => {
+    let firstResponseController: ReadableStreamDefaultController<Uint8Array> | undefined;
+    const fetchMock = vi.fn(async () => {
+      if (fetchMock.mock.calls.length === 1) {
+        return new Response(
+          new ReadableStream({
+            start(controller) {
+              firstResponseController = controller;
+            },
+          }),
+        );
+      }
+      return new Response('second');
+    });
+
+    getModel({
+      providerId: 'ollama',
+      modelId: 'llama3.3',
+      baseUrl: 'http://localhost:11434/v1',
+      fetchImpl: fetchMock as typeof fetch,
+    });
+    const options = openAiMock.createOpenAI.mock.calls.at(-1)?.[0] as { fetch?: typeof fetch };
+
+    const first = await options.fetch?.('http://localhost:11434/v1/chat/completions');
+    const second = options.fetch?.('http://localhost:11434/v1/chat/completions');
+    await Promise.resolve();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    firstResponseController?.enqueue(new TextEncoder().encode('first'));
+    firstResponseController?.close();
+    await expect(first?.text()).resolves.toBe('first');
+    await expect(second?.then((response) => response.text())).resolves.toBe('second');
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
 });

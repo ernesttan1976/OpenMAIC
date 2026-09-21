@@ -1953,6 +1953,64 @@ export const LLM_FETCH_TIMEOUT_MS = 15 * 60 * 1000;
 let llmDispatcherPromise: Promise<unknown> | undefined;
 let warnedLlmDispatcherFailure = false;
 
+// Ollama can terminate when it receives overlapping generation requests. Keep
+// this process's Ollama transport to one request, including streamed bodies.
+let ollamaRequestTail: Promise<void> = Promise.resolve();
+
+function serializeOllamaResponse(response: Response, release: () => void): Response {
+  if (!response.body) {
+    release();
+    return response;
+  }
+
+  const { readable, writable } = new TransformStream<Uint8Array, Uint8Array>();
+  const reader = response.body.getReader();
+  const writer = writable.getWriter();
+
+  void (async () => {
+    try {
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        await writer.write(value);
+      }
+      await writer.close();
+    } catch (error) {
+      await reader.cancel(error).catch(() => undefined);
+      await writer.abort(error).catch(() => undefined);
+    } finally {
+      reader.releaseLock();
+      release();
+    }
+  })();
+
+  return new Response(readable, {
+    status: response.status,
+    statusText: response.statusText,
+    headers: response.headers,
+  });
+}
+
+async function fetchSeriallyFromOllama(
+  fetchImpl: typeof fetch,
+  input: RequestInfo | URL,
+  init?: RequestInit,
+): Promise<Response> {
+  let release!: () => void;
+  const previous = ollamaRequestTail;
+  ollamaRequestTail = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+
+  await previous;
+  try {
+    return serializeOllamaResponse(await fetchImpl(input, init), release);
+  } catch (error) {
+    release();
+    throw error;
+  }
+}
+
 function getLlmDispatcher(): Promise<unknown> {
   // `??=` caches whatever promise this produces — including a rejected one.
   // Drop the cache on failure so a single transient undici import (or Agent
@@ -2167,34 +2225,41 @@ export function getModel(config: ModelConfig): ModelWithInfo {
   // See LLM_FETCH_TIMEOUT_MS: every outbound LLM request — whatever transport
   // it ends up on — carries the extended-timeout dispatcher.
   const transportFetch: typeof fetch = async (fetchInput, fetchInit) => {
-    // A caller-supplied dispatcher (config.fetchImpl may carry one) wins over
-    // ours; only inject ours when the request doesn't already carry one.
-    if ((fetchInit as (RequestInit & { dispatcher?: unknown }) | undefined)?.dispatcher) {
-      return baseTransportFetch(fetchInput, fetchInit);
-    }
-    let dispatcher: unknown;
-    try {
-      dispatcher = await getLlmDispatcher();
-      warnedLlmDispatcherFailure = false;
-    } catch (error) {
-      // No dispatcher still beats failing the call outright — the request
-      // just rides undici's default 300 s cap, as it did before this seam.
-      // Warn once per failure episode so a persistent failure (not just a
-      // transient one) stays visible: this mitigation silently disengaging
-      // looks exactly like the original 300 s incident.
-      if (!warnedLlmDispatcherFailure) {
-        warnedLlmDispatcherFailure = true;
-        log.warn(
-          '[LLM transport] dispatcher unavailable — requests fall back to undici defaults (300 s headers timeout):',
-          error,
-        );
+    const fetchWithDispatcher: typeof fetch = async (input, init) => {
+      // A caller-supplied dispatcher (config.fetchImpl may carry one) wins over
+      // ours; only inject ours when the request doesn't already carry one.
+      if ((init as (RequestInit & { dispatcher?: unknown }) | undefined)?.dispatcher) {
+        return baseTransportFetch(input, init);
       }
-      return baseTransportFetch(fetchInput, fetchInit);
+      let dispatcher: unknown;
+      try {
+        dispatcher = await getLlmDispatcher();
+        warnedLlmDispatcherFailure = false;
+      } catch (error) {
+        // No dispatcher still beats failing the call outright — the request
+        // just rides undici's default 300 s cap, as it did before this seam.
+        // Warn once per failure episode so a persistent failure (not just a
+        // transient one) stays visible: this mitigation silently disengaging
+        // looks exactly like the original 300 s incident.
+        if (!warnedLlmDispatcherFailure) {
+          warnedLlmDispatcherFailure = true;
+          log.warn(
+            '[LLM transport] dispatcher unavailable — requests fall back to undici defaults (300 s headers timeout):',
+            error,
+          );
+        }
+        return baseTransportFetch(input, init);
+      }
+      return baseTransportFetch(input, {
+        ...init,
+        dispatcher,
+      } as RequestInit);
+    };
+
+    if (config.providerId === 'ollama') {
+      return fetchSeriallyFromOllama(fetchWithDispatcher, fetchInput, fetchInit);
     }
-    return baseTransportFetch(fetchInput, {
-      ...fetchInit,
-      dispatcher,
-    } as RequestInit);
+    return fetchWithDispatcher(fetchInput, fetchInit);
   };
 
   let model: LanguageModel;
