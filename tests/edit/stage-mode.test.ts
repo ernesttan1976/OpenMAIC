@@ -32,12 +32,11 @@ describe('stage edit mode store', () => {
 });
 
 describe('isCurrentSceneEditable', () => {
-  test('returns true when a real scene is resolved and nothing is generating', () => {
+  test('returns true when a real scene is resolved', () => {
     expect(
       isCurrentSceneEditable({
         currentSceneId: 'scene-1',
         sceneCount: 3,
-        generatingOutlineCount: 0,
         hasCurrentScene: true,
       }),
     ).toBe(true);
@@ -48,7 +47,6 @@ describe('isCurrentSceneEditable', () => {
       isCurrentSceneEditable({
         currentSceneId: PENDING_SCENE_ID,
         sceneCount: 3,
-        generatingOutlineCount: 0,
         hasCurrentScene: true,
       }),
     ).toBe(false);
@@ -59,19 +57,7 @@ describe('isCurrentSceneEditable', () => {
       isCurrentSceneEditable({
         currentSceneId: null,
         sceneCount: 0,
-        generatingOutlineCount: 0,
         hasCurrentScene: false,
-      }),
-    ).toBe(false);
-  });
-
-  test('returns false while outline generation is still in flight', () => {
-    expect(
-      isCurrentSceneEditable({
-        currentSceneId: 'scene-1',
-        sceneCount: 1,
-        generatingOutlineCount: 2,
-        hasCurrentScene: true,
       }),
     ).toBe(false);
   });
@@ -81,7 +67,6 @@ describe('isCurrentSceneEditable', () => {
       isCurrentSceneEditable({
         currentSceneId: 'scene-x',
         sceneCount: 3,
-        generatingOutlineCount: 0,
         hasCurrentScene: false,
       }),
     ).toBe(false);

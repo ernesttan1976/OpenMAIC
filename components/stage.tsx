@@ -66,7 +66,7 @@ export function Stage({
   classroomId?: string;
   onRetryOutline?: (outlineId: string) => Promise<void>;
 }) {
-  const { mode, setMode, scenes, currentSceneId, generatingOutlines, stage } = useStageStore();
+  const { mode, setMode, scenes, currentSceneId, stage } = useStageStore();
   const router = useRouter();
   const enteringWorkbench = useRef(false);
   const proWorkbenchFlag = isProWorkbenchEnabled();
@@ -138,13 +138,12 @@ export function Stage({
     isCurrentSceneEditable({
       currentSceneId,
       sceneCount: scenes.length,
-      generatingOutlineCount: generatingOutlines.length,
       hasCurrentScene: !!currentScene,
     });
 
-  // Hosted generation is page-granular: once the current page materialises,
-  // the human may edit it while the agent writes later scene IDs. Keep the
-  // stricter whole-deck generation gate above for standalone Pro mode.
+  // Generation is page-granular: once the current page materialises, the human
+  // may edit it while the agent writes later scene IDs. The hosted predicate
+  // adds the workspace-specific ownership and identity checks.
   const currentStageMatchesHost = !classroomId || stage?.id === classroomId;
   const hostedSceneEditable = isHostedSceneEditable({
     editorEnabled,
@@ -152,7 +151,6 @@ export function Stage({
     stageMatchesHost: currentStageMatchesHost,
     currentSceneId,
     sceneCount: scenes.length,
-    generatingOutlineCount: generatingOutlines.length,
     hasCurrentScene: !!currentScene,
   });
   const chromeEditable = hosted ? hostedSceneEditable : isEditable;
@@ -240,8 +238,8 @@ export function Stage({
     });
   }, [mode, setMode]);
 
-  // Auto-exit edit mode when the current scene becomes uneditable
-  // (pending generation, no scenes, currently generating).
+  // Auto-exit edit mode when the selected scene becomes uneditable
+  // (pending generation or no scene).
   useEffect(() => {
     if (mode === 'edit' && !isEditable) {
       setMode('playback');

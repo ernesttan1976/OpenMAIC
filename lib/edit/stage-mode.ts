@@ -9,20 +9,19 @@ import type { StageMode } from '@/lib/types/stage';
 export interface StageEditModeContext {
   currentSceneId: string | null;
   sceneCount: number;
-  generatingOutlineCount: number;
   hasCurrentScene: boolean;
 }
 
 /**
  * Whether edit mode should remain active for the given stage state.
- * Returns false in cases that would otherwise strand the user in an empty
- * edit shell — pending scene, no scenes, generation in flight, or no current
- * scene resolved yet.
+ * Returns false only when the selected scene cannot be edited without
+ * stranding the user in an empty edit shell — pending scene, no scenes, or no
+ * current scene resolved yet. Generation of other scenes is intentionally not
+ * a blocker: materialized scenes remain editable while later scenes generate.
  */
 export function isCurrentSceneEditable(ctx: StageEditModeContext): boolean {
   if (ctx.currentSceneId === PENDING_SCENE_ID) return false;
   if (ctx.sceneCount === 0) return false;
-  if (ctx.generatingOutlineCount > 0) return false;
   if (!ctx.hasCurrentScene) return false;
   return true;
 }
@@ -36,7 +35,7 @@ export interface HostedStageEditContext extends StageEditModeContext {
 /**
  * Hosted editing is page-scoped: generation of later outlines must not lock a
  * current scene that has already materialised. Same-page/identity guards still
- * apply; `generatingOutlineCount` is intentionally not a blocker here.
+ * apply.
  */
 export function isHostedSceneEditable(ctx: HostedStageEditContext): boolean {
   if (!ctx.editorEnabled || !ctx.isOwner || !ctx.stageMatchesHost) return false;
