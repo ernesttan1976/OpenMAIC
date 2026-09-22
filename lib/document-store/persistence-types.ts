@@ -1,8 +1,9 @@
 import type { MaicDocument } from '@openmaic/storage';
 import type { Stage } from '@openmaic/dsl';
 
-import type { SceneOutline } from '@/lib/types/generation';
+import type { ImageMapping, PdfImage, SceneOutline } from '@/lib/types/generation';
 import type { AppScene } from '@/lib/types/stage';
+import type { AgentInfo } from '@openmaic/generation';
 
 /** App-owned stage shape. Device playback position is not document metadata. */
 export type AppStage = Stage;
@@ -25,6 +26,15 @@ export type AppStage = Stage;
  */
 export type DocumentProducer = 'client' | 'server-job';
 
+/** Inputs required to resume client-owned scene generation after a reload. */
+export interface GenerationResumeContext {
+  pdfImages?: PdfImage[];
+  imageMapping?: ImageMapping;
+  agents?: AgentInfo[];
+  userProfile?: string;
+  languageDirective?: string;
+}
+
 /** Generation intent stored opaquely with the document aggregate. */
 export interface AppDocumentOutline {
   outlines: SceneOutline[];
@@ -39,6 +49,8 @@ export interface AppDocumentOutline {
   producer?: DocumentProducer;
   /** Opaque handle of the producing job, when one owns the course. */
   producerRef?: string;
+  /** Durable client-side handoff for unfinished scene generation. */
+  generationContext?: GenerationResumeContext;
   /**
    * Receipts of completed `import_pptx` calls, keyed by the same
    * `import_pptx:<key>` string that rides `requirement`. A material whose

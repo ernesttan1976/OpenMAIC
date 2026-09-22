@@ -542,6 +542,16 @@ function GenerationPreviewContent() {
         interactiveMode: !!currentSession.requirements.interactiveMode,
         taskEngineMode: currentSession.taskEngineMode === true,
       };
+      // Create the course before any generation request. This makes the plan
+      // and its eventual scene job recoverable from the persisted document.
+      const store = useStageStore.getState();
+      store.setStage(stage);
+      store.setGenerationContext({
+        pdfImages: currentSession.pdfImages,
+        imageMapping,
+        languageDirective: currentSession.languageDirective,
+      });
+      await store.saveToStorage();
 
       // ── Generate outlines first (infers languageDirective) ──
       let outlines = currentSession.sceneOutlines;
@@ -939,9 +949,7 @@ function GenerationPreviewContent() {
       }
 
       // Store stage and outlines
-      const store = useStageStore.getState();
       stage.videoManifest = buildVideoManifestFromOutlines(outlines);
-      store.setStage(stage);
       store.setOutlines(outlines);
 
       // Advance to slide-content step
@@ -959,6 +967,16 @@ function GenerationPreviewContent() {
         currentSession.requirements.userNickname || currentSession.requirements.userBio
           ? `Student: ${currentSession.requirements.userNickname || 'Unknown'}${currentSession.requirements.userBio ? ` — ${currentSession.requirements.userBio}` : ''}`
           : undefined;
+      store.setGenerationContext({
+        pdfImages: currentSession.pdfImages,
+        imageMapping,
+        agents,
+        userProfile,
+        languageDirective,
+      });
+      // Commit the approved plan and its resume inputs before generating the
+      // first scene, not only at the route transition.
+      await store.saveToStorage();
 
       // Generate ONLY the first scene
       store.setGeneratingOutlines(outlines);
@@ -1035,17 +1053,6 @@ function GenerationPreviewContent() {
       // Set remaining outlines as skeleton placeholders
       const remaining = outlines.filter((o) => o.order !== firstScene.order);
       store.setGeneratingOutlines(remaining);
-
-      // Store generation params for classroom to continue generation
-      sessionStorage.setItem(
-        'generationParams',
-        JSON.stringify({
-          pdfImages: currentSession.pdfImages,
-          agents,
-          userProfile,
-          languageDirective,
-        }),
-      );
 
       sessionStorage.removeItem('generationSession');
       await store.saveToStorage();

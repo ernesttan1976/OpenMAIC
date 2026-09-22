@@ -21,7 +21,10 @@ import { migrateScene } from '@/lib/edit/slide-schema';
 import { preparePBLScenesForDocumentPersistence } from '@/lib/pbl/v2/runtime/document-persistence';
 import { hydratePBLScenesFromRuntime } from '@/lib/pbl/v2/runtime/hydration';
 import type { ChatStorageSnapshot } from '@/lib/utils/chat-storage';
-import type { DocumentProducer } from '@/lib/document-store/persistence-types';
+import type {
+  DocumentProducer,
+  GenerationResumeContext,
+} from '@/lib/document-store/persistence-types';
 import type { PendingChange, StaleDroppedSave } from '@/lib/utils/stage-storage';
 import { collectStageAssetRefs } from '@/lib/media/collect-stage-asset-refs';
 import { reconcileSceneMediaAllocations } from '@/lib/media/reconcile-scene-media';
@@ -217,6 +220,8 @@ function clearedStageState(state: Pick<StageState, 'generationEpoch'>) {
     chatSnapshot: { sessions: [], restoreMarker: null },
     outlines: [],
     generationComplete: false,
+    generationContext: undefined,
+    outlineProducer: null,
     generationEpoch: state.generationEpoch + 1,
     generationStatus: 'idle' as const,
     currentGeneratingOrder: -1,
@@ -305,6 +310,7 @@ interface StageState {
   // Persisted (with outlines): true once generation finished for this stage.
   // Gates resume-on-mount so an edited finished deck is not regenerated.
   generationComplete: boolean;
+  generationContext?: GenerationResumeContext;
 
   /**
    * Viewer-facing ownership facts resolved from the stage-meta sidecar (the
@@ -356,6 +362,7 @@ interface StageState {
   setGeneratingOutlines: (outlines: SceneOutline[]) => void;
   setOutlines: (outlines: SceneOutline[]) => void;
   setGenerationComplete: (complete: boolean) => void;
+  setGenerationContext: (context?: GenerationResumeContext) => void;
   /** Mark generation complete iff every outline has a scene and none failed. */
   markGenerationCompleteIfDone: () => void;
   /**
@@ -403,12 +410,33 @@ type StagePersistenceSnapshot = Pick<
   | 'chatSnapshot'
   | 'outlines'
   | 'generationComplete'
+  | 'generationContext'
+  | 'outlineProducer'
 >;
 
 function persistenceSnapshot(state: StageState): StagePersistenceSnapshot {
-  const { stage, scenes, currentSceneId, chats, chatSnapshot, outlines, generationComplete } =
-    state;
-  return { stage, scenes, currentSceneId, chats, chatSnapshot, outlines, generationComplete };
+  const {
+    stage,
+    scenes,
+    currentSceneId,
+    chats,
+    chatSnapshot,
+    outlines,
+    generationComplete,
+    generationContext,
+    outlineProducer,
+  } = state;
+  return {
+    stage,
+    scenes,
+    currentSceneId,
+    chats,
+    chatSnapshot,
+    outlines,
+    generationComplete,
+    generationContext,
+    outlineProducer,
+  };
 }
 
 function delay(ms: number): Promise<void> {
@@ -443,6 +471,8 @@ async function persistDirtySnapshot(
       outline: {
         outlines: snapshot.outlines,
         generationComplete: snapshot.generationComplete,
+        generationContext: snapshot.generationContext,
+        producer: snapshot.outlineProducer ?? undefined,
         createdAt: Date.now(),
         updatedAt: Date.now(),
       },
@@ -478,6 +508,7 @@ const useStageStoreBase = create<StageState>()((set, get) => ({
   generatingOutlines: [],
   outlines: [],
   generationComplete: false,
+  generationContext: undefined,
   outlineProducer: null,
   isOwner: true,
   readOnly: false,
@@ -554,6 +585,8 @@ const useStageStoreBase = create<StageState>()((set, get) => ({
       chats: [],
       chatSnapshot: { sessions: [], restoreMarker: null },
       generationComplete: false,
+      generationContext: undefined,
+      outlineProducer: null,
       generationEpoch: s.generationEpoch + 1,
     }));
     markPendingChanges(stage.id, { kind: 'structure' }, { kind: 'stage' });
@@ -781,6 +814,11 @@ const useStageStoreBase = create<StageState>()((set, get) => ({
     void get().saveToStorage();
   },
 
+  setGenerationContext: (generationContext) => {
+    set({ generationContext });
+    markPendingChanges(get().stage?.id, { kind: 'outline' });
+  },
+
   markGenerationCompleteIfDone: () => {
     const { outlines, scenes, failedOutlines, generationComplete } = get();
     if (generationComplete) return;
@@ -830,8 +868,17 @@ const useStageStoreBase = create<StageState>()((set, get) => ({
   // durability (e.g. setGenerationComplete) can avoid recording state that
   // outruns the scene data.
   saveToStorage: async () => {
-    const { stage, scenes, currentSceneId, chats, chatSnapshot, outlines, generationComplete } =
-      get();
+    const {
+      stage,
+      scenes,
+      currentSceneId,
+      chats,
+      chatSnapshot,
+      outlines,
+      generationComplete,
+      generationContext,
+      outlineProducer,
+    } = get();
     if (!stage?.id) {
       log.warn('Cannot save: stage.id is required');
       return false;
@@ -855,6 +902,8 @@ const useStageStoreBase = create<StageState>()((set, get) => ({
           outline: {
             outlines,
             generationComplete,
+            generationContext,
+            producer: outlineProducer ?? undefined,
             createdAt: Date.now(),
             updatedAt: Date.now(),
           },
@@ -1042,10 +1091,8 @@ const useStageStoreBase = create<StageState>()((set, get) => ({
         // recorded.
         //
         // Matching is by `order`, consistent with the rest of the resume
-        // pipeline. For a never-edited deck order is a faithful key; the only
-        // way it diverges is Pro-mode insert/reorder, which is blocked while
-        // outlines are still pending (see stage-mode edit gating), so an
-        // interrupted deck cannot be edited into a false "all materialized".
+        // pipeline. A completed plan remains complete even when the user later
+        // edits, inserts, or reorders slides.
         const inMemoryState = get();
         const failedOutlines =
           inMemoryState.stage?.id === stageId ? inMemoryState.failedOutlines : [];
@@ -1064,6 +1111,8 @@ const useStageStoreBase = create<StageState>()((set, get) => ({
           chatSnapshot: data.chatSnapshot ?? { sessions: [], restoreMarker: undefined },
           outlines,
           generationComplete,
+          generationContext: outlinesRecord?.generationContext,
+          outlineProducer: outlinesRecord?.producer ?? 'client',
           // Compute generatingOutlines from persisted outlines minus completed
           // scenes. Once generation is complete the deck is frozen for editing,
           // so an orphaned outline (e.g. from a deleted slide) must NOT surface

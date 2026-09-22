@@ -311,45 +311,43 @@ export function ClassroomSurface({
       return;
     }
 
-    const { outlines, scenes, stage, generationComplete } = state;
+    const { outlines, scenes, stage, generationComplete, generationContext } = state;
 
-    // Check if there are pending outlines. A finished deck is frozen for
-    // editing: deleting a slide leaves its outline orphaned, but that must not
-    // be treated as an interrupted generation and regenerated. Only resume
-    // when generation has not completed.
+    // A completed initial plan never restarts merely because later edits delete
+    // or reorder slides. Only an incomplete generation resumes automatically.
     const completedOrders = new Set(scenes.map((s) => s.order));
     const hasPending = !generationComplete && outlines.some((o) => !completedOrders.has(o.order));
 
-    if (hasPending && stage) {
+    if (hasPending) {
+      if (!stage || !generationContext) {
+        log.warn('[Classroom] Pending generation has no durable resume context.');
+        return;
+      }
       generationStartedRef.current = true;
-
-      // Load generation params from sessionStorage (stored by generation-preview before navigating)
-      const genParamsStr = sessionStorage.getItem('generationParams');
-      const params = genParamsStr ? JSON.parse(genParamsStr) : {};
 
       // Reconstruct imageMapping for the resumed generation. The mapping may
       // MIX allocated asset ids and IndexedDB data URLs — a source whose cache
       // write failed materialized its own images — so the resume mapping merges
       // both, instead of choosing one transport for the whole set and silently
       // dropping the other half.
-      const pdfImages = (params.pdfImages || []) as Array<
+      const pdfImages = (generationContext.pdfImages || []) as Array<
         { id: string; assetId?: string; storageId?: string } & Record<string, unknown>
       >;
       const finishResume = (imageMapping: Record<string, string>) =>
         generateRemaining({
-          pdfImages: params.pdfImages,
+          pdfImages: generationContext.pdfImages,
           imageMapping,
           stageInfo: {
             name: stage.name || '',
             description: stage.description,
             style: stage.style,
           },
-          agents: params.agents,
-          userProfile: params.userProfile,
-          languageDirective: params.languageDirective || stage.languageDirective,
+          agents: generationContext.agents,
+          userProfile: generationContext.userProfile,
+          languageDirective: generationContext.languageDirective || stage.languageDirective,
         });
 
-      const imageMapping: Record<string, string> = {};
+      const imageMapping: Record<string, string> = { ...generationContext.imageMapping };
       for (const img of pdfImages) {
         if (img.assetId) imageMapping[img.id] = img.assetId;
       }
@@ -357,10 +355,15 @@ export function ClassroomSurface({
         .filter((img) => !img.assetId && img.storageId)
         .map((img) => img.storageId as string);
       void (async () => {
-        if (storageIds.length > 0) {
-          Object.assign(imageMapping, await loadImageMapping(storageIds));
+        try {
+          if (storageIds.length > 0) {
+            Object.assign(imageMapping, await loadImageMapping(storageIds));
+          }
+          finishResume(imageMapping);
+        } catch (err) {
+          generationStartedRef.current = false;
+          log.warn('[Classroom] Failed to restore generation material:', err);
         }
-        finishResume(imageMapping);
       })();
     } else if (outlines.length > 0 && stage) {
       // All scenes are generated, but some media may not have finished.
