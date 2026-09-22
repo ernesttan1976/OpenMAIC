@@ -79,10 +79,10 @@ export interface StageRecord {
 /**
  * Folder table - User-created folders for grouping courses.
  *
- * Folder membership is device-local organization metadata, not part of the
- * course document itself (which is owned by the `@openmaic/storage`
- * DocumentStore in a separate database). It lives in this Dexie database
- * alongside the legacy tables. See {@link StageFolderMembership}.
+ * In local-only deployments, folder membership is device-local organization
+ * metadata. Server-backed deployments store it on the PostgreSQL stage row.
+ * This Dexie table remains the local-only implementation; see
+ * {@link StageFolderMembership}.
  */
 export interface FolderRecord {
   id: string; // Primary key
@@ -97,8 +97,8 @@ export interface FolderRecord {
  * has at most one row; a missing row (or `folderId === undefined`) means the
  * course is unfiled. This is intentionally separate from both the legacy
  * `stages` table (a migration mirror that nothing writes) and the
- * DocumentStore stage row (version-independent document content), so folder
- * grouping never touches document semantics.
+ * DocumentStore stage row (version-independent document content), so local
+ * folder grouping never touches document semantics.
  */
 export interface StageFolderMembership {
   stageId: string; // Primary key (FK -> DocumentStore stage id)

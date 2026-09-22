@@ -10,7 +10,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
  * only the folder tables (`folders`, `stageFolders`) use in-memory maps.
  */
 
-const { folders, memberships, dbMock, mutateDocumentMock } = vi.hoisted(() => {
+const { folders, memberships, dbMock, mutateDocumentMock, browserPersistenceEnabled } = vi.hoisted(() => {
   const folders = new Map<string, Record<string, unknown>>();
   const memberships = new Map<string, Record<string, unknown>>();
 
@@ -81,10 +81,14 @@ const { folders, memberships, dbMock, mutateDocumentMock } = vi.hoisted(() => {
         fn: (doc: unknown, store: { deleteDocument: () => Promise<void> }) => Promise<void>,
       ) => fn(undefined, { deleteDocument: vi.fn().mockResolvedValue(undefined) }),
     ),
+    browserPersistenceEnabled: vi.fn(() => false),
   } as any;
 });
 
 vi.mock('@/lib/utils/database', () => ({ db: dbMock }));
+vi.mock('@/lib/persistence/bootstrap', () => ({
+  isBrowserPersistenceEnabled: browserPersistenceEnabled,
+}));
 vi.mock('@/lib/document-store', () => ({
   accessDocument: vi.fn(),
   clearCurrentScene: vi.fn().mockResolvedValue(undefined),
@@ -129,6 +133,7 @@ import {
   createFolder,
   renameFolder,
   deleteFolder,
+  listStages,
   setStageFolder,
   FolderNameError,
 } from '@/lib/utils/stage-storage';
@@ -136,6 +141,8 @@ import {
 beforeEach(() => {
   folders.clear();
   memberships.clear();
+  browserPersistenceEnabled.mockReturnValue(false);
+  vi.unstubAllGlobals();
 });
 
 describe('createFolder / renameFolder name validation', () => {
@@ -188,6 +195,67 @@ describe('setStageFolder membership', () => {
     await setStageFolder('stage-1', undefined);
     const row = await dbMock.stageFolders.get('stage-1');
     expect(row.folderId).toBeUndefined();
+  });
+
+  it('persists a server-backed move through the folder-members endpoint', async () => {
+    browserPersistenceEnabled.mockReturnValue(true);
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ ok: true })));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await setStageFolder('stage-1', 'folder-1');
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/folders/members', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ stageId: 'stage-1', folderId: 'folder-1' }),
+    });
+    expect(memberships.size).toBe(0);
+  });
+
+  it('unfiles server-backed courses through the folder-members endpoint', async () => {
+    browserPersistenceEnabled.mockReturnValue(true);
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ ok: true })));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await setStageFolder('stage-1', undefined);
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/folders/members', expect.objectContaining({
+      body: JSON.stringify({ stageId: 'stage-1', folderId: null }),
+    }));
+  });
+});
+
+describe('server-backed stage folders', () => {
+  it('uses the folder returned by the server rather than a stale local membership', async () => {
+    browserPersistenceEnabled.mockReturnValue(true);
+    await dbMock.stageFolders.put({
+      stageId: 'stage-1',
+      folderId: 'old-browser-folder',
+      updatedAt: 1,
+    });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            stages: [
+              {
+                id: 'stage-1',
+                name: 'Shared course',
+                sceneCount: 1,
+                createdAt: 1,
+                updatedAt: 2,
+                folderId: 'database-folder',
+              },
+            ],
+          }),
+        ),
+      ),
+    );
+
+    await expect(listStages()).resolves.toMatchObject([
+      { id: 'stage-1', folderId: 'database-folder' },
+    ]);
   });
 });
 

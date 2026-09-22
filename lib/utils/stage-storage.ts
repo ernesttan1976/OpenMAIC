@@ -110,7 +110,7 @@ export interface StageListItem {
   updatedAt: number;
   interactiveMode?: boolean;
   taskEngineMode?: boolean;
-  /** Folder this course belongs to; undefined = unfiled. Device-local only. */
+  /** Folder this course belongs to; undefined = unfiled. */
   folderId?: string;
   /** False when this shared course belongs to another user and is read-only. */
   isOwner?: boolean;
@@ -765,10 +765,10 @@ async function performStageDeletion(stageId: string): Promise<void> {
  * ask the document store for an unscoped listing. `GET /api/stages` is the
  * shared library: it resolves the anonymous owner from the same cookie the
  * workbench uses and returns each live stage with an `isOwner` edit capability.
- * Folders list through the owner-scoped
- * `GET /api/folders` (see `listOwnerFoldersFromServer`), while membership stays
- * device-local (Dexie), so the same membership overlay the local path applies
- * keeps courses filed in this browser grouped.
+ * Folders list through the owner-scoped `GET /api/folders` (see
+ * `listOwnerFoldersFromServer`), and membership comes directly from the same
+ * PostgreSQL stage rows. Do not overlay Dexie membership here: that would make
+ * an old browser-local move win over the organization shared by every device.
  */
 async function listSharedStagesFromServer(): Promise<StageListItem[]> {
   const res = await fetch('/api/stages', { credentials: 'include' });
@@ -779,8 +779,6 @@ async function listSharedStagesFromServer(): Promise<StageListItem[]> {
   if (!body || !Array.isArray(body.stages)) {
     throw new Error('Malformed /api/stages response: expected { stages: [...] }');
   }
-  const memberships = await db.stageFolders.toArray();
-  const folderByStage = new Map(memberships.map((m) => [m.stageId, m.folderId]));
   return (body.stages as SharedStageSummary[])
     .map((item) => {
       const base: StageListItem = {
@@ -794,8 +792,7 @@ async function listSharedStagesFromServer(): Promise<StageListItem[]> {
         ...(item.taskEngineMode !== undefined ? { taskEngineMode: item.taskEngineMode } : {}),
         ...(item.isOwner !== undefined ? { isOwner: item.isOwner } : {}),
       };
-      const folderId = folderByStage.get(item.id) ?? item.folderId;
-      return folderId ? { ...base, folderId } : base;
+      return item.folderId ? { ...base, folderId: item.folderId } : base;
     })
     .sort((a, b) => b.updatedAt - a.updatedAt);
 }
@@ -1386,15 +1383,24 @@ export async function deleteFolder(id: string, mode: DeleteFolderMode = 'ungroup
  * Move a course into a folder, or out of all folders when `folderId` is
  * `undefined`. Idempotent.
  *
- * Membership is device-local either way (the `stageFolders` overlay keeps
- * courses filed in this browser even when the folders themselves live on the
- * server), so only the destination's existence check differs between modes:
- * locally the `folders` table is checked inside the same transaction, while
- * with server persistence on the folder list came from `/api/folders` and the
- * local table has no row for it — the id is trusted from the rendered tree,
- * and the server re-checks existence on its own membership writes.
+ * With server persistence on, membership is written to the owner-scoped stage
+ * row through `/api/folders/members`; it is shared across browsers. Local-only
+ * deployments retain the Dexie membership table.
  */
 export async function setStageFolder(stageId: string, folderId: string | undefined): Promise<void> {
+  if (isBrowserPersistenceEnabled()) {
+    const res = await fetch('/api/folders/members', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ stageId, folderId: folderId ?? null }),
+    });
+    if (!res.ok) {
+      const body = (await res.json().catch(() => null)) as FolderRouteBody | null;
+      throw folderRouteError(body);
+    }
+    return;
+  }
+
   const now = Date.now();
   // Validate the destination folder exists before writing the membership row.
   // Without this, an import that started inside a folder which is then deleted
