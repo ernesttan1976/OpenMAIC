@@ -330,9 +330,7 @@ export function ClassroomSurface({
       // write failed materialized its own images — so the resume mapping merges
       // both, instead of choosing one transport for the whole set and silently
       // dropping the other half.
-      const pdfImages = (generationContext.pdfImages || []) as Array<
-        { id: string; assetId?: string; storageId?: string } & Record<string, unknown>
-      >;
+      const pdfImages = generationContext.pdfImages || [];
       const finishResume = (imageMapping: Record<string, string>) =>
         generateRemaining({
           pdfImages: generationContext.pdfImages,
