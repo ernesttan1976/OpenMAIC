@@ -2,7 +2,7 @@
 
 import { memo, useCallback, useRef, useState } from 'react';
 import { Reorder } from 'motion/react';
-import { MoreHorizontal } from 'lucide-react';
+import { MoreHorizontal, Sparkles } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
   DropdownMenu,
@@ -200,55 +200,68 @@ function ThumbItemComponent({
             )}
           </div>
 
-          {/* Three-dot overflow menu — hover-revealed, always visible
-              while open. Hidden during inline rename so the input has
-              the full header row. */}
+          {/* Keep the AI slide action directly on the card; management
+              actions stay in the hover-revealed overflow menu. */}
           {!renaming && (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
+            <div className="flex shrink-0 items-center gap-1">
+              {scene.type === 'slide' && onEditWithAi ? (
                 <button
                   type="button"
-                  onClick={(e) => e.stopPropagation()}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onEditWithAi();
+                  }}
                   onPointerDown={(e) => e.stopPropagation()}
-                  aria-label={t('edit.nav.moreActions')}
-                  data-testid="slide-nav-more"
+                  onKeyDown={(e) => e.stopPropagation()}
+                  aria-label={t('edit.nav.editWithAi')}
+                  title={t('edit.nav.editWithAi')}
+                  data-testid="slide-nav-edit-with-ai"
                   className={cn(
                     'shrink-0 rounded p-0.5 text-zinc-400 transition-opacity',
-                    'opacity-0 group-hover/thumb:opacity-100 data-[state=open]:opacity-100',
-                    'hover:bg-zinc-200/80 hover:text-zinc-700',
-                    'dark:hover:bg-zinc-700 dark:hover:text-zinc-200',
+                    'opacity-100 sm:opacity-0 sm:group-hover/thumb:opacity-100 sm:group-focus-within/thumb:opacity-100',
+                    'hover:bg-violet-100 hover:text-violet-700 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500',
+                    'dark:hover:bg-violet-900/50 dark:hover:text-violet-300',
                   )}
                 >
-                  <MoreHorizontal className="h-3.5 w-3.5" />
+                  <Sparkles className="h-3.5 w-3.5" />
                 </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent
-                align="end"
-                side="right"
-                className="min-w-36"
-                onClick={(e) => e.stopPropagation()}
-              >
-                <DropdownMenuItem onSelect={startRename}>{t('edit.nav.rename')}</DropdownMenuItem>
-                {scene.type === 'slide' && onEditWithAi ? (
-                  <DropdownMenuItem
-                    onSelect={(event) => {
-                      event.stopPropagation();
-                      onEditWithAi();
-                    }}
+              ) : null}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    type="button"
+                    onClick={(e) => e.stopPropagation()}
+                    onPointerDown={(e) => e.stopPropagation()}
+                    aria-label={t('edit.nav.moreActions')}
+                    data-testid="slide-nav-more"
+                    className={cn(
+                      'shrink-0 rounded p-0.5 text-zinc-400 transition-opacity',
+                      'opacity-0 group-hover/thumb:opacity-100 data-[state=open]:opacity-100',
+                      'hover:bg-zinc-200/80 hover:text-zinc-700',
+                      'dark:hover:bg-zinc-700 dark:hover:text-zinc-200',
+                    )}
                   >
-                    {t('edit.nav.editWithAi')}
+                    <MoreHorizontal className="h-3.5 w-3.5" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent
+                  align="end"
+                  side="right"
+                  className="min-w-36"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <DropdownMenuItem onSelect={startRename}>{t('edit.nav.rename')}</DropdownMenuItem>
+                  {SCENE_CREATION_ENABLED && (
+                    <DropdownMenuItem onSelect={onDuplicate}>
+                      {t('edit.nav.duplicate')}
+                    </DropdownMenuItem>
+                  )}
+                  <DropdownMenuItem disabled={!canDelete} onSelect={onDelete} variant="destructive">
+                    {t('edit.nav.delete')}
                   </DropdownMenuItem>
-                ) : null}
-                {SCENE_CREATION_ENABLED && (
-                  <DropdownMenuItem onSelect={onDuplicate}>
-                    {t('edit.nav.duplicate')}
-                  </DropdownMenuItem>
-                )}
-                <DropdownMenuItem disabled={!canDelete} onSelect={onDelete} variant="destructive">
-                  {t('edit.nav.delete')}
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
           )}
         </div>
 

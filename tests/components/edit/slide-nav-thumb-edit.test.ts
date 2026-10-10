@@ -97,8 +97,8 @@ describe('slide thumbnail AI edit action', () => {
       );
     });
 
-    const action = [...container.querySelectorAll('button')].find((button) =>
-      button.textContent?.includes('edit.nav.editWithAi'),
+    const action = container.querySelector<HTMLButtonElement>(
+      '[data-testid="slide-nav-edit-with-ai"]',
     );
     expect(action).toBeTruthy();
     await act(async () => action!.click());
@@ -123,6 +123,6 @@ describe('slide thumbnail AI edit action', () => {
       );
     });
 
-    expect(container.textContent).not.toContain('edit.nav.editWithAi');
+    expect(container.querySelector('[data-testid="slide-nav-edit-with-ai"]')).toBeNull();
   });
 });
