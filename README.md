@@ -1036,3 +1036,4 @@ When redistributing the repository as a whole, the terms of each bundled package
 
 
 docker compose up -d --build
+docker compose --env-file .env.local build --no-cache && docker compose up -d --force-recreate
