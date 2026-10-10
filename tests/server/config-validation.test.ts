@@ -255,9 +255,34 @@ describe('validateServerConfig — warning matrix', () => {
     it('does not warn when the runtime flag is set with DATABASE_URL present', async () => {
       vi.stubEnv('OPENMAIC_AGENT_RUNTIME_ENABLED', 'true');
       vi.stubEnv('DATABASE_URL', 'postgres://runtime');
+      vi.stubEnv(
+        'MODEL_ROUTES',
+        JSON.stringify({
+          'maic-agent-driver': { model: 'ollama:llama3.3', api: 'openai-completions' },
+        }),
+      );
       const { validateServerConfig } = await import('@/lib/server/config-validation');
       validateServerConfig();
       expect(warnSpy).not.toHaveBeenCalled();
+    });
+
+    it('warns at boot when the agent runtime has no driver route', async () => {
+      vi.stubEnv('OPENMAIC_AGENT_RUNTIME_ENABLED', 'true');
+      vi.stubEnv('DATABASE_URL', 'postgres://runtime');
+      const { validateServerConfig } = await import('@/lib/server/config-validation');
+      validateServerConfig();
+      expect(warnSpy).toHaveBeenCalledTimes(1);
+      expect(String(warnSpy.mock.calls[0][0])).toContain('maic-agent-driver');
+    });
+
+    it('warns at boot when the agent driver route has no supported api/dialect', async () => {
+      vi.stubEnv('OPENMAIC_AGENT_RUNTIME_ENABLED', 'true');
+      vi.stubEnv('DATABASE_URL', 'postgres://runtime');
+      vi.stubEnv('MODEL_ROUTES', JSON.stringify({ 'maic-agent-driver': 'ollama:llama3.3' }));
+      const { validateServerConfig } = await import('@/lib/server/config-validation');
+      validateServerConfig();
+      expect(warnSpy).toHaveBeenCalledTimes(1);
+      expect(String(warnSpy.mock.calls[0][0])).toContain('api or dialect');
     });
 
     it('does not warn when the runtime flag is off even without DATABASE_URL', async () => {

@@ -907,6 +907,7 @@ export async function runSession(ctx: RunContext, meta: ClaimedAgentSession): Pr
   let criticalWriteError: unknown;
   let entryWritesHealthy = true;
   let terminalFrameEmitted = false;
+  let agentDriverSetupFailed = false;
 
   const markLeaseLost = () => {
     leaseLost = true;
@@ -1259,7 +1260,18 @@ export async function runSession(ctx: RunContext, meta: ClaimedAgentSession): Pr
       });
     }
 
-    const driver = await resolveAgentDriverModel();
+    let driver: Awaited<ReturnType<typeof resolveAgentDriverModel>>;
+    try {
+      driver = await resolveAgentDriverModel();
+    } catch (error) {
+      // Driver resolution is configuration-only. Re-running the same undelivered
+      // prompt cannot fix a missing/invalid route or provider setup, and used to
+      // poison the session with lifecycle-only events before the transcript had
+      // any entries. Let the user see the actionable failure once; a fresh
+      // message can retry after the deployment configuration is corrected.
+      agentDriverSetupFailed = true;
+      throw error;
+    }
     const streamFn = createCallLlmStreamFn({
       languageModel: driver.connection.model,
       maxOutputTokens: driver.wireMaxOutputTokens,
@@ -1844,7 +1856,7 @@ export async function runSession(ctx: RunContext, meta: ClaimedAgentSession): Pr
           expectedAttempt: attempt,
         })
         .catch(() => false);
-      if (settled) await requeueIfUndelivered('setup failure');
+      if (settled && !agentDriverSetupFailed) await requeueIfUndelivered('setup failure');
     }
     log.error(`session ${id} failed during setup`, error);
   } finally {

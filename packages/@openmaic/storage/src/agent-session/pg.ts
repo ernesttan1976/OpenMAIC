@@ -1270,17 +1270,14 @@ export class PgAgentSessionStore
   }
 
   async hasSessionRunHistory(sessionId: string): Promise<boolean> {
-    const types = [
-      AGENT_SESSION_LIFECYCLE.sessionStart,
-      AGENT_SESSION_LIFECYCLE.sessionResumed,
-      AGENT_SESSION_LIFECYCLE.sessionInterrupted,
-      AGENT_SESSION_LIFECYCLE.sessionEnd,
-    ];
+    // Lifecycle frames are written before setup is complete. They must not make
+    // an empty transcript look corrupted after a failed model/provider setup;
+    // only a finalized message proves that entry-tree history should exist.
     const result = await this.queryable.query<{ present: number }>(
       `SELECT 1 AS present FROM ${this.table('events')} e
        INNER JOIN ${this.table('sessions')} s ON s.id = e.session_id
-       WHERE e.session_id = $1 AND e.type = ANY($2::text[]) AND s.deleted_at IS NULL LIMIT 1`,
-      [sessionId, types],
+       WHERE e.session_id = $1 AND e.type = 'message_end' AND s.deleted_at IS NULL LIMIT 1`,
+      [sessionId],
     );
     return result.rows.length > 0;
   }

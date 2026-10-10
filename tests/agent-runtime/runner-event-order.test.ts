@@ -3,6 +3,17 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({
   appendRunEvent: vi.fn(async (..._args: unknown[]) => 1),
   finishSession: vi.fn(async () => true),
+  listUserMessages: vi.fn(
+    async () =>
+      [] as Array<{
+        seq: number;
+        ts: number;
+        text: string;
+        delivery: string;
+        materials: unknown[];
+      }>,
+  ),
+  requeueForRetry: vi.fn(async () => true),
   releaseLease: vi.fn(async () => undefined),
 }));
 
@@ -16,9 +27,9 @@ vi.mock('@/lib/server/agent-runtime/store', () => ({
     heartbeat: vi.fn(async () => true),
     getCancelRequestedAt: vi.fn(async () => null),
     isCancelRequested: vi.fn(async () => false),
-    listUserMessages: vi.fn(async () => []),
+    listUserMessages: mocks.listUserMessages,
     releaseLease: mocks.releaseLease,
-    requeueForRetry: vi.fn(async () => false),
+    requeueForRetry: mocks.requeueForRetry,
     requeueSession: vi.fn(async () => false),
   })),
 }));
@@ -101,5 +112,36 @@ describe('runSession durable event ordering', () => {
     );
     expect(types.at(-1)).toBe('session_end');
     expect(types).not.toContain('session_interrupted');
+  });
+
+  it('does not burn unattended retries when driver setup fails before prompt delivery', async () => {
+    mocks.listUserMessages.mockResolvedValue([
+      { seq: 1, ts: 1, text: 'Edit the selected slide.', delivery: 'queued', materials: [] },
+    ]);
+
+    await runSession(
+      { running: new Map(), shuttingDown: false },
+      {
+        id: 'session-order',
+        ownerId: 'owner-1',
+        prompt: 'Edit the selected slide.',
+        stageId: 'stage-1',
+        existingCourse: true,
+        status: 'running',
+        attempt: 1,
+        createdAt: 1,
+        updatedAt: 1,
+        claimReason: 'queued',
+        claimSeq: 1,
+        deliveredUserMessageSeq: 0,
+      },
+    );
+
+    expect(mocks.finishSession).toHaveBeenCalledWith(
+      'session-order',
+      expect.any(String),
+      expect.objectContaining({ status: 'failed', error: 'driver setup unavailable' }),
+    );
+    expect(mocks.requeueForRetry).not.toHaveBeenCalled();
   });
 });

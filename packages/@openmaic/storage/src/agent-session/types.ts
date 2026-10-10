@@ -421,6 +421,7 @@ export interface AgentSessionEventLog {
     limit?: number,
   ): Promise<{ events: PersistedAgentSessionEvent[]; scanned: number }>;
   lastEventSeq(sessionId: string): Promise<number>;
+  /** True only after a finalized agent message; lifecycle-only setup failures are not history. */
   hasSessionRunHistory(sessionId: string): Promise<boolean>;
 }
 

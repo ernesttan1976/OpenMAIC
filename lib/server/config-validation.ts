@@ -17,6 +17,8 @@
  *  - the agent runtime flag set without a `DATABASE_URL` — the runtime is
  *    enabled but unusable, so its probe reports disabled and its routes
  *    answer 404 while the runner never starts.
+ *  - the agent runtime configured with a database but without its required
+ *    `maic-agent-driver` model and OpenAI-compatible transport.
  *
  * Everything here is a warning, never a throw: operators with partial config
  * still get a running app, and the warnings name exactly what is broken.
@@ -162,6 +164,53 @@ function validateAgentRuntime(): void {
   if (!process.env.DATABASE_URL?.trim()) {
     warn(
       'OPENMAIC_AGENT_RUNTIME_ENABLED is set but DATABASE_URL is not — the agent runtime is enabled but unusable: its probe reports disabled, its routes answer 404, and no runner starts. Set DATABASE_URL or disable the flag.',
+    );
+    return;
+  }
+
+  const raw = process.env.MODEL_ROUTES?.trim();
+  if (!raw) {
+    warn(
+      'The agent runtime requires MODEL_ROUTES stage "maic-agent-driver" with a provider-prefixed model id and api/dialect; its sessions will fail until configured.',
+    );
+    return;
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return; // validateModelRoutes already reports invalid JSON.
+  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return;
+  const driverRoute = (parsed as Record<string, unknown>)['maic-agent-driver'];
+  if (driverRoute === undefined) {
+    warn(
+      'The agent runtime requires MODEL_ROUTES stage "maic-agent-driver" with a provider-prefixed model id and api/dialect; its sessions will fail until configured.',
+    );
+    return;
+  }
+
+  const model = routeModel(driverRoute);
+  if (model) {
+    const separator = model.indexOf(':');
+    if (separator <= 0 || separator === model.length - 1) {
+      warn(
+        'MODEL_ROUTES stage "maic-agent-driver" must use a provider-prefixed model id, for example "openai:gpt-5.5".',
+      );
+    }
+  }
+  const routeObject =
+    driverRoute && typeof driverRoute === 'object' && !Array.isArray(driverRoute)
+      ? (driverRoute as Record<string, unknown>)
+      : undefined;
+  const api =
+    (typeof routeObject?.api === 'string' && routeObject.api.trim()) ||
+    (typeof routeObject?.dialect === 'string' && routeObject.dialect.trim()) ||
+    '';
+  if (api !== 'openai-completions' && api !== 'openai-responses') {
+    warn(
+      'MODEL_ROUTES stage "maic-agent-driver" must set api or dialect to "openai-completions" or "openai-responses".',
     );
   }
 }

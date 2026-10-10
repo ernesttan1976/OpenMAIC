@@ -122,6 +122,34 @@ describe('PgAgentSessionStore with PGlite', () => {
     ]);
   });
 
+  test('counts finalized messages, not lifecycle-only setup failures, as session run history', async () => {
+    await store.createSession(makeAgentSessionInput());
+    const claim = await store.claimNextSession('worker-a', 101, {
+      leaseTtlMs: 10_000,
+      maxAttempts: 5,
+      sessionId: 'session-1',
+    });
+    expect(claim).not.toBeNull();
+
+    for (const type of ['session_start', 'session_end']) {
+      await store.appendRunEvent('session-1', 'worker-a', {
+        ts: 1,
+        attempt: claim!.attempt,
+        type,
+        data: {},
+      });
+    }
+    await expect(store.hasSessionRunHistory('session-1')).resolves.toBe(false);
+
+    await store.appendRunEvent('session-1', 'worker-a', {
+      ts: 2,
+      attempt: claim!.attempt,
+      type: 'message_end',
+      data: { message: { role: 'assistant', content: [] } },
+    });
+    await expect(store.hasSessionRunHistory('session-1')).resolves.toBe(true);
+  });
+
   test('persists a manual title in session detail and owner lists', async () => {
     await store.createSession(makeAgentSessionInput());
     await db.query(`UPDATE agent_sessions SET updated_at = '2000-01-01T00:00:00Z' WHERE id = $1`, [
