@@ -629,7 +629,7 @@ export function buildGenerationTools(deps: GenerationToolDeps): AgentTool<never,
         params.sceneId && currentTarget && params.regenerateActions !== true,
       );
       const actions = preserveActions
-        ? currentTarget!.actions
+        ? (currentTarget!.actions ?? [])
         : filterKnownActions(
             await actionGenerator(outline, content, aiCallFor('scene-actions'), {
               ctx: currentTarget ? actionContext(currentDoc.scenes, currentTarget) : undefined,
