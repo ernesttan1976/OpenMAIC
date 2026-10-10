@@ -16,6 +16,7 @@ import {
 import { cn } from '@/lib/utils';
 import { SlideThumbnail } from '@/components/slide-renderer/SlideThumbnail';
 import { ThumbnailInteractive } from '@/components/slide-renderer/components/ThumbnailInteractive';
+import { Switch } from '@/components/ui/switch';
 import { useStageStore, useCanvasStore } from '@/lib/store';
 import { useI18n } from '@/lib/hooks/use-i18n';
 import { useNearViewport } from '@/lib/hooks/use-near-viewport';
@@ -29,6 +30,9 @@ interface SceneSidebarProps {
   readonly onSceneSelect?: (sceneId: string) => void;
   readonly onRetryOutline?: (outlineId: string) => Promise<void>;
   readonly isCourseComplete?: boolean;
+  readonly canEnterProMode?: boolean;
+  readonly onEnterProMode?: () => void;
+  readonly proModeActive?: boolean;
 }
 
 const DEFAULT_WIDTH = 220;
@@ -42,6 +46,9 @@ export function SceneSidebar({
   onSceneSelect,
   onRetryOutline,
   isCourseComplete,
+  canEnterProMode,
+  onEnterProMode,
+  proModeActive = false,
 }: SceneSidebarProps) {
   const { t } = useI18n();
   const router = useRouter();
@@ -150,6 +157,39 @@ export function SceneSidebar({
             <PanelLeftClose className="w-4 h-4" />
           </button>
         </div>
+
+        {onEnterProMode && (
+          <div className="shrink-0 px-3 pb-2">
+            <label
+              title={
+                !canEnterProMode && !proModeActive
+                  ? t('stage.proModeDisabledHint')
+                  : proModeActive
+                    ? t('stage.doneEditing')
+                    : t('stage.editCourse')
+              }
+              className={cn(
+                'flex h-9 items-center justify-between rounded-lg border px-3 shadow-sm transition-colors',
+                'border-purple-200 bg-purple-50/80 dark:border-purple-800/60 dark:bg-purple-950/30',
+                !canEnterProMode && !proModeActive
+                  ? 'cursor-not-allowed opacity-60'
+                  : 'cursor-pointer hover:border-purple-400 dark:hover:border-purple-600',
+              )}
+            >
+              <span className="text-xs font-bold text-purple-700 dark:text-purple-300">
+                {t('stage.editCourse')}
+              </span>
+              <Switch
+                checked={proModeActive}
+                onCheckedChange={onEnterProMode}
+                disabled={!canEnterProMode && !proModeActive}
+                aria-label={proModeActive ? t('stage.doneEditing') : t('stage.editCourse')}
+                data-testid="pro-mode-sidebar-switch"
+                className="data-[state=checked]:bg-purple-600 dark:data-[state=checked]:bg-purple-500"
+              />
+            </label>
+          </div>
+        )}
 
         {/* Scenes List */}
         <div
