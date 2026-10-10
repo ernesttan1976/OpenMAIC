@@ -104,6 +104,10 @@ import { shouldShowWorkbenchEmptyState, WorkbenchChatEmptyState } from './chat/e
 import { invalidateAgentSkills } from '@/lib/workbench/agent-skills';
 import { settleSentElementRefs } from '@/lib/workbench/element-ref-send-result';
 import { settleSentCourseRefs } from '@/lib/workbench/course-ref-send-result';
+import {
+  registerEditorWorkbenchSubmit,
+  takeQueuedEditorMessage,
+} from '@/lib/workbench/editor-submit-bridge';
 
 const NO_ELEMENT_REFS: ElementRef[] = [];
 const NO_COURSE_REFS: CourseRef[] = [];
@@ -664,6 +668,18 @@ export function WorkbenchChat({
     },
     [busy, draftConversation, sessionId, status, t],
   );
+
+  useEffect(() => {
+    if (!hosted) return;
+    return registerEditorWorkbenchSubmit(async (text) => (await submit(text, [])).accepted);
+  }, [hosted, submit]);
+
+  useEffect(() => {
+    if (!hosted || !canSend || busy) return;
+    const queued = takeQueuedEditorMessage();
+    if (!queued) return;
+    void submit(queued, []);
+  }, [busy, canSend, hosted, submit]);
 
   /**
    * A question card's answer. The SAME send path as typing it out, so the answer

@@ -8,6 +8,7 @@ import {
   generateSceneContent,
   PBLGenerationError,
   type AICallFn,
+  type GeneratedSlideContent,
   type ImageMapping,
   type PdfImage,
   type SceneContentFailureCode,
@@ -38,6 +39,11 @@ const log = createLogger('AgentGenerationTools');
 const SceneParams = Type.Object({
   stageId: Type.String({ description: COURSE_STAGE_ID_DESCRIPTION }),
   order: Type.Integer({ minimum: 1 }),
+  sceneId: Type.Optional(
+    Type.String({
+      description: 'Stable id of the existing slide to edit; authoritative over order.',
+    }),
+  ),
   title: Type.String({ minLength: 1 }),
   type: Type.Union([
     Type.Literal('slide'),
@@ -68,6 +74,19 @@ const SceneParams = Type.Object({
   ),
   brief: Type.String({ minLength: 1 }),
   instruction: Type.Optional(Type.String()),
+  changeTitle: Type.Optional(
+    Type.Boolean({ description: 'Set only when the user explicitly requested a title change.' }),
+  ),
+  changeBackground: Type.Optional(
+    Type.Boolean({
+      description: 'Set only when the user explicitly requested a background change.',
+    }),
+  ),
+  regenerateActions: Type.Optional(
+    Type.Boolean({
+      description: 'Set only when the user requested narration or playback-action changes.',
+    }),
+  ),
   materialFacts: Type.Optional(Type.Array(Type.String())),
   media: Type.Optional(
     Type.Array(
@@ -216,6 +235,126 @@ function actionContext(scenes: readonly Scene[], current: Scene): SceneGeneratio
   };
 }
 
+interface PreparedSceneEdit {
+  readonly baseline: GeneratedSlideContent;
+  readonly context: string;
+  readonly assignedImages: PdfImage[];
+  readonly imageMapping: ImageMapping;
+  readonly mediaReferences: Record<string, string>;
+}
+
+function inlineMedia(value: string, key: string): boolean {
+  if (/data:[^,\s"'<>]*,/i.test(value)) return true;
+  if (!/(?:base64|bytes|imageData|videoData|audioData)/i.test(key)) return false;
+  return /^[A-Za-z0-9+/_=\-\s]+$/.test(value);
+}
+
+/** Build a prompt-safe scene projection while retaining reversible asset ids. */
+function prepareSceneEdit(scene: Scene): PreparedSceneEdit {
+  const assignedImages: PdfImage[] = [];
+  const imageMapping: ImageMapping = {};
+  const mediaReferences: Record<string, string> = {};
+  const assets: Array<Record<string, unknown>> = [];
+  let imageIndex = 0;
+  let mediaIndex = 0;
+
+  const project = (
+    value: unknown,
+    key = '',
+    ownerType = '',
+    owner?: Record<string, unknown>,
+  ): unknown => {
+    if (typeof value === 'string') {
+      const mediaSlot = ['src', 'mediaRef', 'poster'].includes(key);
+      if (!mediaSlot && !inlineMedia(value, key)) return value;
+      if (!value) return value;
+
+      if (ownerType === 'image' && key === 'src') {
+        const id = `img_${++imageIndex}`;
+        const source = value;
+        imageMapping[id] = source;
+        const description = String(
+          owner?.description ?? owner?.alt ?? owner?.name ?? owner?.title ?? 'Existing slide image',
+        );
+        const width = typeof owner?.width === 'number' ? owner.width : undefined;
+        const height = typeof owner?.height === 'number' ? owner.height : undefined;
+        assignedImages.push({
+          id,
+          src: source,
+          description,
+          pageNumber: scene.order,
+          sourceDocumentName: `existing slide ${scene.order}`,
+          ...(width ? { width } : {}),
+          ...(height ? { height } : {}),
+        });
+        assets.push({ id, type: 'image', elementId: owner?.id, description, width, height });
+        return id;
+      }
+
+      const id = `edit_media_${++mediaIndex}`;
+      mediaReferences[id] = value;
+      assets.push({
+        id,
+        type: ownerType || (key === 'poster' ? 'image' : 'media'),
+        elementId: owner?.id,
+        property: key,
+        extension: owner?.ext,
+        description: owner?.description ?? owner?.alt ?? owner?.name,
+      });
+      return id;
+    }
+    if (Array.isArray(value)) return value.map((item) => project(item, key, ownerType, owner));
+    if (!value || typeof value !== 'object') return value;
+    const record = value as Record<string, unknown>;
+    const currentType = typeof record.type === 'string' ? record.type : ownerType;
+    return Object.fromEntries(
+      Object.entries(record).map(([childKey, childValue]) => [
+        childKey,
+        project(childValue, childKey, currentType, record),
+      ]),
+    );
+  };
+
+  const safeScene = project(scene) as Scene;
+  const baseline = {
+    elements: safeScene.content.type === 'slide' ? safeScene.content.canvas.elements : [],
+    background: safeScene.content.type === 'slide' ? safeScene.content.canvas.background : undefined,
+    remark: '',
+  };
+  return {
+    baseline,
+    context: JSON.stringify({ scene: safeScene, assets }),
+    assignedImages,
+    imageMapping,
+    mediaReferences,
+  };
+}
+
+function restoreSceneEditMedia(value: unknown, mediaReferences: Record<string, string>): unknown {
+  if (typeof value === 'string') {
+    return mediaReferences[value] ?? value;
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => restoreSceneEditMedia(item, mediaReferences));
+  }
+  if (!value || typeof value !== 'object') return value;
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>).map(([key, item]) => [
+      key,
+      restoreSceneEditMedia(item, mediaReferences),
+    ]),
+  );
+}
+
+function authoredSceneVersion(scene: Scene): string {
+  const authored = { ...(scene as unknown as Record<string, unknown>) };
+  delete authored.title;
+  delete authored.order;
+  delete authored.createdAt;
+  delete authored.updatedAt;
+  return JSON.stringify(authored);
+}
+
 /** Drop action names unknown to the current DSL before they reach persistence. */
 export function filterKnownActions(actions: readonly Action[]): Action[] {
   return actions.filter((action) => isActionType(action.type));
@@ -230,7 +369,7 @@ export function buildGenerationTools(deps: GenerationToolDeps): AgentTool<never,
     name: 'generate_scene',
     label: 'Generate page',
     description:
-      'Generate and durably persist one page from an explicit title, type, and brief. Reusing an order replaces that page. Interactive pages accept widgetType (simulation/diagram/code/game/visualization3d) plus a matching widgetOutline object; both are rejected for other page types.',
+      'Generate and durably persist one page from an explicit title, type, and brief. Reusing an order replaces that page. For an existing slide edit, pass sceneId; the current scene order is authoritative. Preserve its title/background unless the user explicitly requests a change, and set regenerateActions only for requested narration/action changes. Interactive pages accept widgetType (simulation/diagram/code/game/visualization3d) plus a matching widgetOutline object; both are rejected for other page types.',
     parameters: SceneParams,
     async execute(_callId, params, signal) {
       if (!Number.isInteger(params.order) || params.order < 1) {
@@ -244,10 +383,34 @@ export function buildGenerationTools(deps: GenerationToolDeps): AgentTool<never,
       }
       const doc = await deps.store.loadDocument(params.stageId);
       if (!doc) return result('No course document yet. Call create_stage first.', {}, true);
-      const existing = doc.scenes.find((scene) => scene.order === params.order);
-      const title = params.title.trim();
+      const existing = params.sceneId
+        ? doc.scenes.find((scene) => scene.id === params.sceneId)
+        : doc.scenes.find((scene) => scene.order === params.order);
+      const originalAuthoredVersion = existing ? authoredSceneVersion(existing) : null;
+      if (params.sceneId && (!existing || existing.stageId !== params.stageId)) {
+        return result(
+          'The selected page was not found in this stage. Nothing was changed.',
+          { error: 'scene-not-found', sceneId: params.sceneId },
+          true,
+        );
+      }
+      if (params.sceneId && existing?.type !== 'slide') {
+        return result(
+          'generate_scene sceneId edits are supported only for slide pages.',
+          { error: 'scene-not-slide', sceneId: params.sceneId, type: existing?.type },
+          true,
+        );
+      }
+      if (params.sceneId && params.type !== 'slide') {
+        return result(
+          'generate_scene sceneId edits must keep the selected page type as slide.',
+          { error: 'scene-type-change-not-supported', sceneId: params.sceneId, type: params.type },
+          true,
+        );
+      }
+      const requestedTitle = params.title.trim();
       const brief = params.brief.trim();
-      if (!title || !brief) {
+      if (!requestedTitle || !brief) {
         return result(
           'generate_scene needs a non-empty title and brief.',
           {
@@ -263,6 +426,9 @@ export function buildGenerationTools(deps: GenerationToolDeps): AgentTool<never,
           true,
         );
       }
+      const title =
+        params.sceneId && existing && !params.changeTitle ? existing.title : requestedTitle;
+      const order = params.sceneId && existing ? existing.order : params.order;
       if (existing?.type === 'pbl' && params.type !== 'pbl') {
         return result(
           'The existing page is a PBL project. Delete it first or regenerate it as pbl; changing its type here would destroy the project.',
@@ -308,8 +474,8 @@ export function buildGenerationTools(deps: GenerationToolDeps): AgentTool<never,
         );
       }
       const outline: SceneOutline = {
-        id: existing?.outlineId ?? `p${params.order}`,
-        order: params.order,
+        id: existing?.outlineId ?? `p${order}`,
+        order,
         title,
         type: params.type,
         description: brief,
@@ -336,15 +502,12 @@ export function buildGenerationTools(deps: GenerationToolDeps): AgentTool<never,
             }
           : {}),
       };
-      const baseline =
-        params.instruction && existing?.type === 'slide'
-          ? {
-              elements: existing.content.canvas.elements,
-              background: existing.content.canvas.background,
-            }
+      const preparedEdit =
+        existing?.type === 'slide' && (params.instruction || params.sceneId)
+          ? prepareSceneEdit(existing)
           : undefined;
-      const assignedImages: PdfImage[] = [];
-      const imageMapping: ImageMapping = {};
+      const assignedImages: PdfImage[] = [...(preparedEdit?.assignedImages ?? [])];
+      const imageMapping: ImageMapping = { ...(preparedEdit?.imageMapping ?? {}) };
       for (const [index, media] of (params.media ?? []).entries()) {
         const src = media.src.trim();
         const description = media.description.trim();
@@ -368,7 +531,7 @@ export function buildGenerationTools(deps: GenerationToolDeps): AgentTool<never,
             true,
           );
         }
-        const id = `img_${index + 1}`;
+        const id = `img_${assignedImages.length + 1}`;
         assignedImages.push({
           id,
           src,
@@ -390,7 +553,8 @@ export function buildGenerationTools(deps: GenerationToolDeps): AgentTool<never,
           allowProceduralSkill: true,
           ...(assignedImages.length ? { assignedImages, imageMapping } : {}),
           ...(params.instruction ? { editDirective: params.instruction } : {}),
-          ...(baseline ? { baselineContent: baseline } : {}),
+          ...(preparedEdit ? { baselineContent: preparedEdit.baseline } : {}),
+          ...(preparedEdit ? { editContext: preparedEdit.context } : {}),
           onFailure: (failure) => {
             contentFailure = failure.code;
           },
@@ -401,7 +565,7 @@ export function buildGenerationTools(deps: GenerationToolDeps): AgentTool<never,
             `PBL generation failed and nothing was written. ${error.message}`,
             {
               error: 'pbl-planner-failed',
-              order: params.order,
+              order,
               title,
               sceneId: existing?.id,
               ...(error.statusCode !== undefined ? { statusCode: error.statusCode } : {}),
@@ -418,7 +582,7 @@ export function buildGenerationTools(deps: GenerationToolDeps): AgentTool<never,
         log.warn({
           error,
           stageId: params.stageId,
-          order: params.order,
+          order,
           title,
           type: params.type,
           ...(existing ? { sceneId: existing.id } : {}),
@@ -433,7 +597,7 @@ export function buildGenerationTools(deps: GenerationToolDeps): AgentTool<never,
           text,
           {
             error,
-            order: params.order,
+            order,
             title,
             type: params.type,
             ...(existing ? { sceneId: existing.id } : {}),
@@ -441,20 +605,103 @@ export function buildGenerationTools(deps: GenerationToolDeps): AgentTool<never,
           true,
         );
       }
-      const actions = filterKnownActions(
-        await actionGenerator(outline, content, aiCallFor('scene-actions'), {
-          agents,
-          languageDirective: doc.stage.languageDirective ?? '',
-        }),
+      if (preparedEdit) {
+        content = restoreSceneEditMedia(content, preparedEdit.mediaReferences) as typeof content;
+      }
+
+      let currentDoc = doc;
+      let currentTarget = existing;
+      if (params.sceneId && existing) {
+        currentDoc = (await deps.store.loadDocument(params.stageId)) ?? doc;
+        currentTarget = currentDoc.scenes.find((scene) => scene.id === params.sceneId);
+        if (!currentTarget || authoredSceneVersion(currentTarget) !== originalAuthoredVersion) {
+          return result(
+            'The selected slide changed while the edit was generating. Nothing was written; retry the edit against the latest slide.',
+            { error: 'scene-changed-during-generation', sceneId: params.sceneId },
+            true,
+          );
+        }
+        outline.title = params.changeTitle ? requestedTitle : currentTarget.title;
+        outline.order = currentTarget.order;
+      }
+
+      const preserveActions = Boolean(
+        params.sceneId && currentTarget && params.regenerateActions !== true,
       );
+      const actions = preserveActions
+        ? currentTarget!.actions
+        : filterKnownActions(
+            await actionGenerator(outline, content, aiCallFor('scene-actions'), {
+              ctx: currentTarget ? actionContext(currentDoc.scenes, currentTarget) : undefined,
+              agents: currentDoc.stage.generatedAgentConfigs,
+              languageDirective: currentDoc.stage.languageDirective ?? '',
+            }),
+          );
       const built = buildCompleteScene(outline, content, actions, params.stageId, {
-        sceneId: existing?.id ?? sceneIdFor(doc.scenes, params.order),
+        sceneId: currentTarget?.id ?? sceneIdFor(currentDoc.scenes, order),
       });
       if (!built) return result('Page assembly failed; nothing was written.', {}, true);
-      const scene = built as Scene;
-      await runStageMutation(signal, () =>
-        putSceneBringingCurrent(deps.store, params.stageId, scene),
-      );
+      let scene = built as Scene;
+      if (params.sceneId && currentTarget?.type === 'slide' && scene.type === 'slide') {
+        const sourceCanvas = currentTarget.content.canvas;
+        scene = {
+          ...currentTarget,
+          ...scene,
+          id: currentTarget.id,
+          outlineId: currentTarget.outlineId ?? outline.id,
+          title: params.changeTitle ? requestedTitle : currentTarget.title,
+          order: currentTarget.order,
+          createdAt: currentTarget.createdAt,
+          updatedAt: Date.now(),
+          actions: preserveActions ? currentTarget.actions : scene.actions,
+          content: {
+            ...currentTarget.content,
+            ...scene.content,
+            canvas: {
+              ...sourceCanvas,
+              ...scene.content.canvas,
+              id: sourceCanvas.id,
+              viewportSize: sourceCanvas.viewportSize,
+              viewportRatio: sourceCanvas.viewportRatio,
+              theme: sourceCanvas.theme,
+              background: params.changeBackground
+                ? scene.content.canvas.background
+                : (scene.content.canvas.background ?? sourceCanvas.background),
+            },
+          },
+        } as Scene;
+      }
+      const wrote = await runStageMutation(signal, async () => {
+        if (params.sceneId && existing) {
+          const latest = await deps.store.loadDocument(params.stageId);
+          const latestTarget = latest?.scenes.find((candidate) => candidate.id === params.sceneId);
+          if (!latestTarget || authoredSceneVersion(latestTarget) !== originalAuthoredVersion) {
+            return false;
+          }
+          // Rebase mutable page metadata one final time so a reorder/rename
+          // made during the model's action pass cannot be reverted.
+          scene = {
+            ...latestTarget,
+            ...scene,
+            id: latestTarget.id,
+            outlineId: latestTarget.outlineId ?? scene.outlineId,
+            title: params.changeTitle ? requestedTitle : latestTarget.title,
+            order: latestTarget.order,
+            createdAt: latestTarget.createdAt,
+            updatedAt: Date.now(),
+            actions: preserveActions ? latestTarget.actions : scene.actions,
+          } as Scene;
+        }
+        await putSceneBringingCurrent(deps.store, params.stageId, scene);
+        return true;
+      });
+      if (!wrote) {
+        return result(
+          'The selected slide changed while the edit was generating. Nothing was written; retry the edit against the latest slide.',
+          { error: 'scene-changed-during-generation', sceneId: params.sceneId },
+          true,
+        );
+      }
       const skill = deps.getActiveSkill?.() ?? null;
       const afterWrite = await deps.store.loadDocument(params.stageId);
       const skillViolations =

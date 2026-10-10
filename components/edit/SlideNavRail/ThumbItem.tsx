@@ -27,6 +27,7 @@ interface ThumbItemProps {
   readonly onActivate: () => void;
   readonly onDuplicate: () => void;
   readonly onDelete: () => void;
+  readonly onEditWithAi?: () => void;
 }
 
 function ThumbItemComponent({
@@ -37,6 +38,7 @@ function ThumbItemComponent({
   onActivate,
   onDuplicate,
   onDelete,
+  onEditWithAi,
 }: ThumbItemProps) {
   const { t } = useI18n();
   const viewportSize = useCanvasStore.use.viewportSize();
@@ -227,6 +229,16 @@ function ThumbItemComponent({
                 onClick={(e) => e.stopPropagation()}
               >
                 <DropdownMenuItem onSelect={startRename}>{t('edit.nav.rename')}</DropdownMenuItem>
+                {scene.type === 'slide' && onEditWithAi ? (
+                  <DropdownMenuItem
+                    onSelect={(event) => {
+                      event.stopPropagation();
+                      onEditWithAi();
+                    }}
+                  >
+                    {t('edit.nav.editWithAi')}
+                  </DropdownMenuItem>
+                ) : null}
                 {SCENE_CREATION_ENABLED && (
                   <DropdownMenuItem onSelect={onDuplicate}>
                     {t('edit.nav.duplicate')}

@@ -20,9 +20,11 @@ import {
 import { SCENE_CREATION_ENABLED } from '@/lib/edit/scene-creation-enabled';
 import { CHROME_DURATION_MS, CHROME_EASE, CHROME_EASE_CSS } from '@/lib/edit/transitions';
 import { useInWorkbenchPanel } from '@/lib/workbench/panel-context';
+import { queueEditorMessageForWorkspace, submitFromEditor } from '@/lib/workbench/editor-submit-bridge';
 import type { Scene } from '@/lib/types/stage';
 import { ThumbItem } from './ThumbItem';
 import { InsertionZone } from './InsertionZone';
+import { EditWithAiDialog } from './EditWithAiDialog';
 
 // Collapsed, the rail is a slim edge handle — just wide enough to hold the
 // expand chevron — rather than a narrow column of page numbers. The point of
@@ -94,6 +96,10 @@ export function SlideNavRail() {
     pointerId: number;
   } | null>(null);
   const [isDragging, setIsDragging] = useState(false);
+  const [editSceneId, setEditSceneId] = useState<string | null>(null);
+  const [editInstruction, setEditInstruction] = useState('');
+  const [editPending, setEditPending] = useState(false);
+  const [editError, setEditError] = useState('');
 
   const cleanupDrag = useCallback(() => {
     dragStateRef.current = null;
@@ -288,6 +294,56 @@ export function SlideNavRail() {
     [deleteScene, scenes, slideCount, totalScenes, t],
   );
 
+  const editScene = editSceneId ? scenes.find((scene) => scene.id === editSceneId) : undefined;
+
+  const handleOpenAiEdit = useCallback((sceneId: string) => {
+    setEditSceneId(sceneId);
+    setEditInstruction('');
+    setEditError('');
+  }, []);
+
+  const handleSubmitAiEdit = useCallback(async () => {
+    const scene = editSceneId ? scenes.find((item) => item.id === editSceneId) : undefined;
+    const instruction = editInstruction.trim();
+    if (!stage || !scene || scene.type !== 'slide' || !instruction || editPending) return;
+    const message = [
+      'Edit only the existing slide identified below. Preserve all other slides and course data.',
+      'Use the existing slide-generation edit path and its current persisted slide as context.',
+      'Preserve the slide title and page order unless the request explicitly asks to change them.',
+      `Course/stage ID: ${stage.id}`,
+      `Selected slide ID: ${scene.id}`,
+      `Selected page: ${scene.order} — ${scene.title}`,
+      `User instruction: ${instruction}`,
+    ].join('\n');
+
+    setEditPending(true);
+    setEditError('');
+    try {
+      if (inWorkbenchPanel) {
+        const accepted = await submitFromEditor(message);
+        if (accepted) {
+          setEditSceneId(null);
+          return;
+        }
+        if (accepted === false) {
+          setEditError(t('edit.nav.editSendFailed'));
+          return;
+        }
+      }
+
+      // A standalone classroom has no mounted chat controller. Carry the
+      // ordinary message into the workspace, where WorkbenchChat submits it
+      // through its own busy/pending/bootstrap/error lifecycle.
+      queueEditorMessageForWorkspace(message);
+      setEditSceneId(null);
+      router.push(`/workspace?course=${encodeURIComponent(stage.id)}`);
+    } catch {
+      setEditError(t('edit.nav.editSendFailed'));
+    } finally {
+      setEditPending(false);
+    }
+  }, [editInstruction, editPending, editSceneId, inWorkbenchPanel, router, scenes, stage, t]);
+
   const canDeleteAny = totalScenes > 1;
   const canDeleteSlide = slideCount > 1;
 
@@ -455,6 +511,9 @@ export function SlideNavRail() {
                       onActivate={() => handleActivate(scene.id)}
                       onDuplicate={() => handleDuplicate(scene.id)}
                       onDelete={() => handleDelete(scene.id)}
+                      onEditWithAi={
+                        scene.type === 'slide' ? () => handleOpenAiEdit(scene.id) : undefined
+                      }
                     />
                     {SCENE_CREATION_ENABLED && (
                       <InsertionZone
@@ -471,6 +530,19 @@ export function SlideNavRail() {
           </AnimatePresence>
         </div>
       )}
+      <EditWithAiDialog
+        scene={editScene}
+        instruction={editInstruction}
+        pending={editPending}
+        error={editError}
+        onInstructionChange={setEditInstruction}
+        onClose={() => {
+          if (editPending) return;
+          setEditSceneId(null);
+          setEditError('');
+        }}
+        onSubmit={() => void handleSubmitAiEdit()}
+      />
     </aside>
   );
 }

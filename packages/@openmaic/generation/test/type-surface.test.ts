@@ -28,6 +28,7 @@ type _SceneContentKeys = Assert<
     | 'allowProceduralSkill'
     | 'editDirective'
     | 'baselineContent'
+    | 'editContext'
     | 'pblLoopFallback'
     | 'onFailure'
     | 'logger'

@@ -99,6 +99,289 @@ function deps(store: CourseStore, extra: Record<string, unknown> = {}) {
 }
 
 describe('generation and deck tools', () => {
+  it('targets slide edits by id, sanitizes media in prompts, and preserves authored actions and metadata', async () => {
+    const existing = slide('existing', 3, 'Current title');
+    existing.outlineId = 'outline-existing';
+    existing.content.canvas.background = { type: 'solid', color: '#123456' } as never;
+    existing.content.canvas.elements = [
+      {
+        id: 'photo',
+        type: 'image',
+        left: 10,
+        top: 20,
+        width: 100,
+        height: 80,
+        src: 'data:image/png;base64,PRIVATE_IMAGE_BYTES',
+        description: 'Volcano photograph',
+      },
+      {
+        id: 'clip',
+        type: 'video',
+        left: 20,
+        top: 30,
+        width: 200,
+        height: 100,
+        src: 'data:video/mp4;base64,PRIVATE_VIDEO_BYTES',
+        autoplay: false,
+      },
+      {
+        id: 'sound',
+        type: 'audio',
+        left: 30,
+        top: 40,
+        width: 50,
+        height: 50,
+        src: 'data:audio/mpeg;base64,PRIVATE_AUDIO_BYTES',
+        fixedRatio: true,
+        color: '#000',
+        loop: false,
+        autoplay: false,
+      },
+    ] as never;
+    existing.actions = [{ type: 'speech', text: 'Existing narration' }] as never;
+    const current = state(document([existing]));
+    const prompts: string[] = [];
+    const aiCall = vi.fn(async (_system: string, user: string) => {
+      prompts.push(user);
+      return JSON.stringify({
+        elements: [
+          { id: 'photo', type: 'image', src: 'img_1', left: 10, top: 20, width: 100, height: 80 },
+          { id: 'clip', type: 'video', src: 'edit_media_1', left: 20, top: 30, width: 200, height: 100 },
+          { id: 'sound', type: 'audio', src: 'edit_media_2', left: 30, top: 40, width: 50, height: 50 },
+        ],
+        background: null,
+        remark: '',
+      });
+    });
+    const generateActions = vi.fn();
+    const generate = find(
+      buildGenerationTools(deps(current.store, { aiCall, generateActions })),
+      'generate_scene',
+    );
+
+    const response = await generate.execute('edit', {
+      stageId: 'stage-test',
+      sceneId: 'existing',
+      order: 1,
+      title: 'Stale model title',
+      type: 'slide',
+      brief: 'Update the selected slide',
+      instruction: 'Make the layout clearer',
+    } as never);
+
+    expect(response).not.toMatchObject({ isError: true });
+    expect(prompts).toHaveLength(1);
+    expect(prompts[0]).toContain('Volcano photograph');
+    expect(prompts[0]).toContain('Existing narration');
+    expect(prompts[0]).toContain('img_1');
+    expect(prompts[0]).not.toContain('PRIVATE_IMAGE_BYTES');
+    expect(prompts[0]).not.toContain('PRIVATE_VIDEO_BYTES');
+    expect(prompts[0]).not.toContain('PRIVATE_AUDIO_BYTES');
+    expect(generateActions).not.toHaveBeenCalled();
+
+    const saved = current.get()?.scenes[0];
+    expect(saved).toMatchObject({
+      id: 'existing',
+      outlineId: 'outline-existing',
+      order: 3,
+      title: 'Current title',
+      actions: [{ type: 'speech', text: 'Existing narration' }],
+    });
+    if (saved?.type !== 'slide') throw new Error('expected persisted slide');
+    expect(saved.content.canvas.background).toEqual({ type: 'solid', color: '#123456' });
+    expect(saved.content.canvas.elements).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: 'image',
+          src: 'data:image/png;base64,PRIVATE_IMAGE_BYTES',
+        }),
+        expect.objectContaining({
+          type: 'video',
+          src: 'data:video/mp4;base64,PRIVATE_VIDEO_BYTES',
+        }),
+        expect.objectContaining({
+          type: 'audio',
+          src: 'data:audio/mpeg;base64,PRIVATE_AUDIO_BYTES',
+        }),
+      ]),
+    );
+  });
+
+  it('regenerates actions with the live page/course context when explicitly requested', async () => {
+    const previous = slide('previous', 1, 'Prior page');
+    previous.actions = [{ type: 'speech', text: 'Previous narration' }] as never;
+    const selected = slide('selected', 2, 'Selected page');
+    const current = state(document([previous, selected]));
+    const generateActions = vi.fn(async () => [{ type: 'speech', text: 'Updated narration' }]);
+    const generate = find(
+      buildGenerationTools(
+        deps(current.store, {
+          aiCall: vi.fn(async () => JSON.stringify({ elements: [], background: null, remark: '' })),
+          generateActions,
+        }),
+      ),
+      'generate_scene',
+    );
+
+    await generate.execute('edit-actions', {
+      stageId: 'stage-test',
+      sceneId: 'selected',
+      order: 2,
+      title: 'Selected page',
+      type: 'slide',
+      brief: 'Update narration',
+      instruction: 'Change the narration',
+      regenerateActions: true,
+    } as never);
+
+    expect(generateActions).toHaveBeenCalledWith(
+      expect.objectContaining({ title: 'Selected page', order: 2 }),
+      expect.any(Object),
+      expect.any(Function),
+      expect.objectContaining({
+        ctx: {
+          pageIndex: 2,
+          totalPages: 2,
+          allTitles: ['Prior page', 'Selected page'],
+          previousSpeeches: ['Previous narration'],
+        },
+        agents: undefined,
+        languageDirective: '',
+      }),
+    );
+    expect(current.get()?.scenes.find((scene) => scene.id === 'selected')?.actions).toEqual([
+      { type: 'speech', text: 'Updated narration' },
+    ]);
+  });
+
+  it('does not fall back to order when a supplied scene id is invalid', async () => {
+    const current = state(document([slide('existing', 1)]));
+    const aiCall = vi.fn();
+    const generate = find(buildGenerationTools(deps(current.store, { aiCall })), 'generate_scene');
+    const response = await generate.execute('invalid-id', {
+      stageId: 'stage-test',
+      sceneId: 'missing',
+      order: 1,
+      title: 'Replacement',
+      type: 'slide',
+      brief: 'Should not run',
+    } as never);
+
+    expect(response).toMatchObject({ isError: true, details: { error: 'scene-not-found' } });
+    expect(aiCall).not.toHaveBeenCalled();
+    expect(current.store.putScene).not.toHaveBeenCalled();
+  });
+
+  it('validates the supplied target stage and slide type before generating', async () => {
+    const quiz = slide('quiz-target', 1, 'Quiz') as Scene;
+    quiz.type = 'quiz';
+    quiz.content = { type: 'quiz', questions: [] } as never;
+    const wrongStage = slide('wrong-stage', 2, 'Wrong stage');
+    wrongStage.stageId = 'another-stage';
+    const current = state(document([quiz, wrongStage]));
+    const aiCall = vi.fn();
+    const generate = find(buildGenerationTools(deps(current.store, { aiCall })), 'generate_scene');
+
+    const wrongStageResponse = await generate.execute('wrong-stage', {
+      stageId: 'stage-test',
+      sceneId: 'wrong-stage',
+      order: 2,
+      title: 'Wrong stage',
+      type: 'slide',
+      brief: 'Edit',
+    } as never);
+    const wrongTypeResponse = await generate.execute('wrong-type', {
+      stageId: 'stage-test',
+      sceneId: 'quiz-target',
+      order: 1,
+      title: 'Quiz',
+      type: 'slide',
+      brief: 'Edit',
+    } as never);
+
+    expect(wrongStageResponse).toMatchObject({
+      isError: true,
+      details: { error: 'scene-not-found' },
+    });
+    expect(wrongTypeResponse).toMatchObject({ isError: true, details: { error: 'scene-not-slide' } });
+    expect(aiCall).not.toHaveBeenCalled();
+    expect(current.store.putScene).not.toHaveBeenCalled();
+  });
+
+  it('rejects an edit when authored slide content changes during generation', async () => {
+    const current = state(document([slide('existing', 1)]));
+    const aiCall = vi.fn(async () => {
+      const live = current.get()?.scenes[0];
+      if (live?.type === 'slide') live.content.canvas.elements.push({
+        id: 'concurrent',
+        type: 'text',
+        left: 0,
+        top: 0,
+        width: 100,
+        height: 40,
+        content: 'Concurrent edit',
+      } as never);
+      return JSON.stringify({ elements: [], background: null, remark: '' });
+    });
+    const generate = find(buildGenerationTools(deps(current.store, { aiCall })), 'generate_scene');
+    const response = await generate.execute('conflict', {
+      stageId: 'stage-test',
+      sceneId: 'existing',
+      order: 1,
+      title: 'Existing',
+      type: 'slide',
+      brief: 'Edit slide',
+      instruction: 'Make it clearer',
+    } as never);
+
+    expect(response).toMatchObject({
+      isError: true,
+      details: { error: 'scene-changed-during-generation', sceneId: 'existing' },
+    });
+    expect(current.store.putScene).not.toHaveBeenCalled();
+    expect(current.get()?.scenes[0]?.content).toMatchObject({
+      canvas: { elements: [expect.objectContaining({ id: 'concurrent' })] },
+    });
+  });
+
+  it('rebases the selected id onto a concurrent reorder without replacing its neighbor', async () => {
+    const neighbor = slide('neighbor', 1, 'Neighbor');
+    const selected = slide('selected', 2, 'Selected');
+    const current = state(document([neighbor, selected]));
+    const aiCall = vi.fn(async () => {
+      const scenes = current.get()?.scenes;
+      if (scenes) {
+        const liveNeighbor = scenes.find((scene) => scene.id === 'neighbor');
+        const liveSelected = scenes.find((scene) => scene.id === 'selected');
+        if (liveNeighbor) liveNeighbor.order = 2;
+        if (liveSelected) {
+          liveSelected.order = 1;
+          liveSelected.title = 'Renamed during generation';
+        }
+      }
+      return JSON.stringify({ elements: [], background: null, remark: '' });
+    });
+    const generate = find(buildGenerationTools(deps(current.store, { aiCall })), 'generate_scene');
+
+    const response = await generate.execute('reordered', {
+      stageId: 'stage-test',
+      sceneId: 'selected',
+      order: 2,
+      title: 'Selected',
+      type: 'slide',
+      brief: 'Edit the selected page',
+      instruction: 'Make this clearer',
+    } as never);
+
+    expect(response).not.toMatchObject({ isError: true });
+    expect(current.get()?.scenes).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: 'neighbor', order: 2, title: 'Neighbor' }),
+        expect.objectContaining({ id: 'selected', order: 1, title: 'Renamed during generation' }),
+      ]),
+    );
+  });
+
   it('reports active-skill diagnostics against the persisted stage after generation', async () => {
     const current = state(document([]));
     const onCheckpoint = vi.fn();

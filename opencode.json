@@ -1,0 +1,17 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "codegraph": {
+      "type": "local",
+      "command": [
+        "npx",
+        "-y",
+        "@astudioplus/codegraph-mcp",
+        "--workspace",
+        "."
+      ],
+      "cwd": "/Volumes/MyCrucial/OpenMAIC",
+      "enabled": true
+    }
+  }
+}
