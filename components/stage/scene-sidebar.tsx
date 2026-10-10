@@ -12,14 +12,21 @@ import {
   AlertCircle,
   RefreshCw,
   Trophy,
+  Sparkles,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { SlideThumbnail } from '@/components/slide-renderer/SlideThumbnail';
 import { ThumbnailInteractive } from '@/components/slide-renderer/components/ThumbnailInteractive';
 import { Switch } from '@/components/ui/switch';
+import { EditWithAiDialog } from '@/components/edit/SlideNavRail/EditWithAiDialog';
 import { useStageStore, useCanvasStore } from '@/lib/store';
 import { useI18n } from '@/lib/hooks/use-i18n';
 import { useNearViewport } from '@/lib/hooks/use-near-viewport';
+import { useInWorkbenchPanel } from '@/lib/workbench/panel-context';
+import {
+  queueEditorMessageForWorkspace,
+  submitFromEditor,
+} from '@/lib/workbench/editor-submit-bridge';
 import type { SceneType, SlideContent, InteractiveContent } from '@/lib/types/stage';
 import { PENDING_SCENE_ID } from '@/lib/store/stage';
 
@@ -54,11 +61,66 @@ export function SceneSidebar({
   const router = useRouter();
   const { scenes, currentSceneId, setCurrentSceneId, generatingOutlines, generationStatus } =
     useStageStore();
+  const stage = useStageStore.use.stage();
   const failedOutlines = useStageStore.use.failedOutlines();
   const viewportSize = useCanvasStore.use.viewportSize();
   const viewportRatio = useCanvasStore.use.viewportRatio();
+  const inWorkbenchPanel = useInWorkbenchPanel();
 
   const [retryingOutlineId, setRetryingOutlineId] = useState<string | null>(null);
+  const [editSceneId, setEditSceneId] = useState<string | null>(null);
+  const [editInstruction, setEditInstruction] = useState('');
+  const [editPending, setEditPending] = useState(false);
+  const [editError, setEditError] = useState('');
+
+  const editScene = editSceneId ? scenes.find((scene) => scene.id === editSceneId) : undefined;
+
+  const handleOpenAiEdit = (sceneId: string) => {
+    setEditSceneId(sceneId);
+    setEditInstruction('');
+    setEditError('');
+  };
+
+  const handleSubmitAiEdit = async () => {
+    const scene = editSceneId ? scenes.find((item) => item.id === editSceneId) : undefined;
+    const instruction = editInstruction.trim();
+    if (!stage || !scene || scene.type !== 'slide' || !instruction || editPending) return;
+    const message = [
+      'Edit only the existing slide identified below. Preserve all other slides and course data.',
+      'Use the existing slide-generation edit path and its current persisted slide as context.',
+      'Preserve the slide title and page order unless the request explicitly asks to change them.',
+      `Course/stage ID: ${stage.id}`,
+      `Selected slide ID: ${scene.id}`,
+      `Selected page: ${scene.order} — ${scene.title}`,
+      `User instruction: ${instruction}`,
+    ].join('\n');
+
+    setEditPending(true);
+    setEditError('');
+    try {
+      if (inWorkbenchPanel) {
+        const accepted = await submitFromEditor(message);
+        if (accepted) {
+          setEditSceneId(null);
+          return;
+        }
+        if (accepted === false) {
+          setEditError(t('edit.nav.editSendFailed'));
+          return;
+        }
+      }
+
+      // In standalone classroom playback, let the workspace's regular chat
+      // submit lifecycle deliver this edit request to the agent.
+      queueEditorMessageForWorkspace(message);
+      setEditSceneId(null);
+      router.push(`/workspace?course=${encodeURIComponent(stage.id)}`);
+    } catch {
+      setEditError(t('edit.nav.editSendFailed'));
+    } finally {
+      setEditPending(false);
+    }
+  };
 
   const handleRetryOutline = async (outlineId: string) => {
     if (!onRetryOutline) return;
@@ -224,7 +286,7 @@ export function SceneSidebar({
               >
                 {/* Scene Header */}
                 <div className="flex justify-between items-center px-2 pt-0.5">
-                  <div className="flex items-center gap-2 max-w-full">
+                  <div className="flex min-w-0 flex-1 items-center gap-2">
                     <span
                       className={cn(
                         'text-[10px] font-black w-4 h-4 rounded-full flex items-center justify-center shrink-0',
@@ -247,6 +309,27 @@ export function SceneSidebar({
                       {scene.title}
                     </span>
                   </div>
+                  {isSlide && (
+                    <button
+                      type="button"
+                      aria-label={t('edit.nav.editWithAi')}
+                      title={t('edit.nav.editWithAi')}
+                      data-testid="scene-edit-with-ai"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        handleOpenAiEdit(scene.id);
+                      }}
+                      onPointerDown={(event) => event.stopPropagation()}
+                      className={cn(
+                        'shrink-0 rounded p-0.5 text-gray-400 transition-opacity',
+                        'opacity-100 sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100',
+                        'hover:bg-purple-100 hover:text-purple-700 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-500',
+                        'dark:hover:bg-purple-900/50 dark:hover:text-purple-300',
+                      )}
+                    >
+                      <Sparkles className="h-3.5 w-3.5" />
+                    </button>
+                  )}
                 </div>
 
                 {/* Thumbnail */}
@@ -606,6 +689,19 @@ export function SceneSidebar({
         {/* Spacer to push toggle button area */}
         <div className="mt-auto" />
       </div>
+      <EditWithAiDialog
+        scene={editScene}
+        instruction={editInstruction}
+        pending={editPending}
+        error={editError}
+        onInstructionChange={setEditInstruction}
+        onClose={() => {
+          if (editPending) return;
+          setEditSceneId(null);
+          setEditError('');
+        }}
+        onSubmit={() => void handleSubmitAiEdit()}
+      />
     </div>
   );
 }
