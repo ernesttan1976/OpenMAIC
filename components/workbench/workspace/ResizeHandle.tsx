@@ -36,6 +36,8 @@ export function ResizeHandle({
   testId,
   label,
   edge,
+  minimum,
+  maximum,
   current,
   clamp,
   onPreview,
@@ -46,6 +48,8 @@ export function ResizeHandle({
   readonly label: string;
   /** Which edge of the pane the strip sits on. */
   readonly edge: 'left' | 'right';
+  readonly minimum?: number;
+  readonly maximum?: number;
   readonly current: () => number;
   readonly clamp: (width: number) => number;
   readonly onPreview: (width: number) => void;
@@ -114,6 +118,23 @@ export function ResizeHandle({
       onPointerUp={endDrag}
       onPointerCancel={endDrag}
       onDoubleClick={onReset}
+      onKeyDown={(event) => {
+        if (event.key === 'Home') {
+          event.preventDefault();
+          onReset();
+          return;
+        }
+        if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+        event.preventDefault();
+        const direction = event.key === 'ArrowRight' ? 1 : -1;
+        const delta = edge === 'right' ? direction : -direction;
+        onCommit(clamp(current() + delta * (event.shiftKey ? 32 : 8)));
+      }}
+      tabIndex={0}
+      aria-valuemin={minimum}
+      aria-valuemax={maximum}
+      aria-valuenow={Math.round(current())}
+      aria-valuetext={`${Math.round(current())}px`}
       className={cn(
         'ws-resize absolute inset-y-0 z-20 w-1.5 cursor-col-resize',
         edge === 'right' ? 'right-0 translate-x-1/2' : 'left-0 -translate-x-1/2',

@@ -59,7 +59,7 @@ function mount() {
 }
 
 async function renderSeam(withSiblingGrip = false) {
-  const calls = { commit: 0, reset: 0, siblingGrip: 0 };
+  const calls = { commit: 0, reset: 0, siblingGrip: 0, widths: [] as number[] };
   const host = mount();
   root = createRoot(host);
   await act(async () => {
@@ -71,8 +71,9 @@ async function renderSeam(withSiblingGrip = false) {
         current: () => 400,
         clamp: (width: number) => width,
         onPreview: () => undefined,
-        onCommit: () => {
+        onCommit: (width: number) => {
           calls.commit += 1;
+          calls.widths.push(width);
         },
         onReset: () => {
           calls.reset += 1;
@@ -120,6 +121,22 @@ describe('the pane seam', () => {
 
     await act(async () => {
       seam.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+    });
+    expect(calls.reset).toBe(1);
+  });
+
+  it('can resize from the keyboard without dragging', async () => {
+    const { host, calls } = await renderSeam();
+    const seam = host.querySelector('[data-testid="seam"]') as HTMLElement;
+
+    await act(async () => {
+      seam.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+    });
+    expect(calls.commit).toBe(1);
+    expect(calls.widths).toEqual([408]);
+
+    await act(async () => {
+      seam.dispatchEvent(new KeyboardEvent('keydown', { key: 'Home', bubbles: true }));
     });
     expect(calls.reset).toBe(1);
   });

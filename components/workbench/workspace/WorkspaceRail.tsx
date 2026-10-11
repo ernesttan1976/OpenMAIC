@@ -74,12 +74,14 @@ import {
 } from 'react';
 import { createPortal } from 'react-dom';
 import {
+  ArrowLeft,
   Check,
   Folder,
   FolderOpen,
   FolderPlus,
   BookOpen,
   LoaderCircle,
+  Home,
   MessagesSquare,
   MoreHorizontal,
   Pencil,
@@ -619,7 +621,7 @@ export function WorkspaceRail({
       <nav
         data-testid="pro-nav-rail-mini"
         aria-label={t('workspace.navAria')}
-        className="ws-rail ws-mini relative z-10 hidden h-full shrink-0 flex-col items-center md:flex"
+        className="ws-rail ws-mini relative z-10 flex h-full shrink-0 flex-col items-center"
       >
         <div className="flex h-16 shrink-0 items-center">
           {/* The expanded header's fold stays in the same spatial slot when the
@@ -645,6 +647,16 @@ export function WorkspaceRail({
             className="ws-mini-btn"
           >
             <Plus className="size-4" aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            data-testid="pro-nav-mini-home"
+            onClick={onGoHome}
+            aria-label={t('workspace.homeAria')}
+            title={t('workspace.homeAria')}
+            className="ws-mini-btn"
+          >
+            <Home className="size-4" aria-hidden="true" />
           </button>
           <div className="my-1 h-px w-6 bg-[color:var(--ws-line-soft)]" aria-hidden="true" />
           <button
@@ -694,6 +706,16 @@ export function WorkspaceRail({
             className="ws-mini-btn"
           >
             <Settings className="size-4" aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            data-testid="pro-workspace-exit-mini"
+            onClick={onExitPro}
+            aria-label={t('workspace.exitPro')}
+            title={t('workspace.exitPro')}
+            className="ws-mini-btn"
+          >
+            <ArrowLeft className="size-4" aria-hidden="true" />
           </button>
         </div>
       </nav>
@@ -837,7 +859,7 @@ export function WorkspaceRail({
       // `z-10`: the resize handle straddles the rail's right edge, and the
       // panes are later positioned siblings — without a stacking order the
       // canvas paints over the handle and swallows the drag.
-      className="ws-rail ws-enter-rail relative z-10 hidden h-full shrink-0 flex-col md:flex"
+      className="ws-rail ws-enter-rail relative z-10 flex h-full shrink-0 flex-col"
       style={{ width: 'var(--ws-rail-w)' }}
     >
       <div className="flex h-16 shrink-0 items-center gap-2 px-4">

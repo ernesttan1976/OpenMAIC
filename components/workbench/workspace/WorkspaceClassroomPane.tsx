@@ -138,6 +138,8 @@ export const WorkspaceClassroomPane = memo(function WorkspaceClassroomPane({
           <button
             type="button"
             data-testid="workbench-start-learning"
+            aria-label={t('workspace.startLearning')}
+            title={t('workspace.startLearning')}
             disabled={scenes.length === 0}
             onClick={() => setPlaybackOn(true)}
             className={cn(
@@ -148,7 +150,7 @@ export const WorkspaceClassroomPane = memo(function WorkspaceClassroomPane({
             )}
           >
             <Play className="size-3.5" aria-hidden="true" />
-            {t('workspace.startLearning')}
+            <span className="ws-learning-label">{t('workspace.startLearning')}</span>
           </button>
         </header>
       )}

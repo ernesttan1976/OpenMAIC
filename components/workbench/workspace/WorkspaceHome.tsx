@@ -45,12 +45,14 @@ import { ProLaunchPanel } from '@/components/workbench/ProLaunchPanel';
 import type { CourseMentionSource } from '@/lib/workbench/course-mention';
 
 export function WorkspaceHome({
+  hidden,
   composerReset,
   discoveryContent,
   courseOptions,
   onOpenSession,
   onExitPro,
 }: {
+  readonly hidden: boolean;
   readonly composerReset: number;
   readonly discoveryContent: ReactNode;
   /**
@@ -76,12 +78,15 @@ export function WorkspaceHome({
     <main
       data-testid="pro-workspace-home"
       aria-label={t('workspace.homeAria')}
-      className="ws-canvas relative flex min-w-0 flex-1 flex-col overflow-y-auto"
+      hidden={hidden}
+      className={cn(
+        'ws-canvas relative min-w-0 flex-1 flex-col overflow-y-auto',
+        hidden ? 'hidden' : 'flex',
+      )}
     >
-      {/* Below `md` the sidebar is gone, so the exit switch needs a home. A
-          plain button, not a second ProBadge: two elements answering to
-          `pro-mode-exit` would be one testid too many. */}
-      <div className="flex h-12 shrink-0 items-center justify-between px-4 md:hidden">
+      {/* The compact rail has an icon-only exit; this labeled action stays in
+          the home chrome as an easy-to-discover alternative. */}
+      <div className="ws-home-exit-bar flex h-12 shrink-0 items-center justify-between px-4 md:hidden">
         <img src={brand.logoSrc} alt={brand.productName} className="h-5 w-auto" />
         <button
           type="button"
@@ -120,7 +125,7 @@ export function WorkspaceHome({
               wrapper, so the entrance animation is never captured. */}
           <div className={cn('flex flex-col items-center', !swapped && 'ws-enter ws-d1')}>
             <div
-              className="relative w-fit"
+              className="ws-hero-lockup relative w-fit"
               data-testid="pro-workspace-hero-lockup"
               data-pro-morph="lockup"
             >
@@ -168,7 +173,7 @@ export function WorkspaceHome({
               gap is what says which of them the page is actually about. */}
           <div className={cn('mt-8', !swapped && 'ws-enter ws-d2')}>
             <ProLaunchPanel
-              autoFocus
+              autoFocus={!hidden}
               focusSignal={composerReset}
               variant="workspace"
               courseOptions={courseOptions}

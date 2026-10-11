@@ -68,12 +68,16 @@ import {
   clampRailWidth,
   parseRailWidth,
   RAIL_WIDTH_DEFAULT,
+  RAIL_WIDTH_MAX,
+  RAIL_WIDTH_MIN,
   RAIL_WIDTH_STORAGE_KEY,
 } from '@/lib/workbench/workspace-navigation';
 import {
   activateCourseTab,
   CHAT_COLLAPSED_STORAGE_KEY,
+  CHAT_WIDTH_MAX,
   CHAT_WIDTH_DEFAULT,
+  CHAT_WIDTH_MIN,
   CHAT_WIDTH_STORAGE_KEY,
   CLASSROOM_COLLAPSED_STORAGE_KEY,
   clampChatWidth,
@@ -213,11 +217,22 @@ function WorkspaceShellController({ initialPanes }: { readonly initialPanes: Wor
     }
   }, [panes.courseId, panes.sessionId]);
   const collapse = usePaneCollapse();
+  const responsiveRail = useResponsiveRail(collapse.value.nav, collapse.toggleNav);
   const [courseTabs, setCourseTabs] = useState(() => restoreCourseTabs(null, panes.courseId));
   const narrow = useNarrowViewport();
   // Which of the two content panes has the column, on a window too narrow for
   // both. Not persisted: it is a consequence of the window, not a preference.
-  const [narrowFocus, setNarrowFocus] = useState<'chat' | 'classroom'>('classroom');
+  // If a resize makes the two content panes exclusive, keep the pane the user
+  // was working in. When there is no focused pane yet, chat is the default.
+  const [narrowFocus, setNarrowFocus] = useState<'chat' | 'classroom'>('chat');
+
+  const notePaneInteraction = useCallback((target: EventTarget | null) => {
+    if (!(target instanceof Element)) return;
+    if (target.closest('[data-testid="workspace-chat-pane"]')) setNarrowFocus('chat');
+    else if (target.closest('[data-testid="workspace-classroom-pane"]')) {
+      setNarrowFocus('classroom');
+    }
+  }, []);
 
   const playbackOn = useWorkbenchStore((s) => s.playbackOn);
   // Read here rather than beside the other session wires below: what the store is
@@ -994,6 +1009,8 @@ function WorkspaceShellController({ initialPanes }: { readonly initialPanes: Wor
         render.home ? 'home' : `${chatOpen ? 'chat' : ''}${classroomOpen ? 'classroom' : ''}`
       }
       className="ws-root flex h-[100dvh] w-full overflow-hidden"
+      onFocusCapture={(event) => notePaneInteraction(event.target)}
+      onPointerDownCapture={(event) => notePaneInteraction(event.target)}
       // The default only — the persisted width is applied to this same
       // variable in a layout effect, so server and client markup agree.
       style={{ ['--ws-rail-w' as string]: `${RAIL_WIDTH_DEFAULT}px` }}
@@ -1010,8 +1027,8 @@ function WorkspaceShellController({ initialPanes }: { readonly initialPanes: Wor
           }}
           activeCourseId={panes.courseId}
           activeSessionId={panes.sessionId}
-          collapsed={collapse.value.nav}
-          onToggleCollapsed={collapse.toggleNav}
+          collapsed={responsiveRail.collapsed}
+          onToggleCollapsed={responsiveRail.toggle}
           onOpenCourse={openCourse}
           onOpenSession={openSession}
           onNewSession={startNewConversation}
@@ -1025,6 +1042,8 @@ function WorkspaceShellController({ initialPanes }: { readonly initialPanes: Wor
               testId="pro-rail-resize-handle"
               label={t('workspace.resizeAria')}
               edge="right"
+              minimum={RAIL_WIDTH_MIN}
+              maximum={RAIL_WIDTH_MAX}
               current={railWidth.current}
               clamp={clampRailWidth}
               onPreview={railWidth.preview}
@@ -1068,6 +1087,8 @@ function WorkspaceShellController({ initialPanes }: { readonly initialPanes: Wor
                 testId="workspace-chat-resize-handle"
                 label={t('workspace.resizeChatAria')}
                 edge="right"
+                minimum={CHAT_WIDTH_MIN}
+                maximum={CHAT_WIDTH_MAX}
                 current={chatWidth.current}
                 clamp={clampChatWidth}
                 onPreview={chatWidth.preview}
@@ -1101,17 +1122,18 @@ function WorkspaceShellController({ initialPanes }: { readonly initialPanes: Wor
         />
       ) : null}
 
-      {render.home ? (
-        <WorkspaceHome
-          composerReset={composerReset}
-          discoveryContent={courses.discoveryContent}
-          // The home composer's `@` picker names courses from the same one list
-          // the rail and the conversation composer use.
-          courseOptions={courseOptions}
-          onOpenSession={openCreatedSession}
-          onExitPro={exitPro}
-        />
-      ) : null}
+      {/* Keep the home composer mounted while a session or classroom is open.
+          Hiding a pane is a visibility change, not a draft-persistence boundary. */}
+      <WorkspaceHome
+        hidden={!render.home}
+        composerReset={composerReset}
+        discoveryContent={courses.discoveryContent}
+        // The home composer's `@` picker names courses from the same one list
+        // the rail and the conversation composer use.
+        courseOptions={courseOptions}
+        onOpenSession={openCreatedSession}
+        onExitPro={exitPro}
+      />
     </div>
   );
 }
@@ -1211,6 +1233,43 @@ function useNarrowViewport(): boolean {
     return () => query.removeEventListener('change', apply);
   }, []);
   return narrow;
+}
+
+/**
+ * The rail is icon-only by default below 900px. This is a temporary layout
+ * adaptation: it never writes the desktop collapsed preference to storage.
+ * Expanding it is an explicit, reversible choice; on phones the expanded rail
+ * overlays the workspace so the active pane keeps its usable width.
+ */
+function useResponsiveRail(
+  desktopCollapsed: boolean,
+  toggleDesktop: () => void,
+): {
+  readonly collapsed: boolean;
+  readonly toggle: () => void;
+} {
+  const [compact, setCompact] = useState(false);
+  const [expanded, setExpanded] = useState(false);
+
+  useLayoutEffect(() => {
+    const query = window.matchMedia('(max-width: 899px)');
+    const apply = () => {
+      setCompact(query.matches);
+    };
+    apply();
+    query.addEventListener('change', apply);
+    return () => query.removeEventListener('change', apply);
+  }, []);
+
+  const toggle = useCallback(() => {
+    if (compact) setExpanded((current) => !current);
+    else toggleDesktop();
+  }, [compact, toggleDesktop]);
+
+  return {
+    collapsed: compact ? !expanded : desktopCollapsed,
+    toggle,
+  };
 }
 
 /* ── Widths ───────────────────────────────────────────────────────────────

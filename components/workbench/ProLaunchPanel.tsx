@@ -118,8 +118,20 @@ export function ProLaunchPanel({
   useEffect(() => {
     const el = textareaRef.current;
     if (!el) return;
-    el.style.height = 'auto';
-    el.style.height = `${Math.min(el.scrollHeight, 260)}px`;
+    const fitTextarea = () => {
+      const viewportHeight = window.visualViewport?.height ?? window.innerHeight;
+      const maxHeight = Math.max(96, Math.min(260, Math.floor(viewportHeight * 0.3)));
+      el.style.height = 'auto';
+      el.style.height = `${Math.min(el.scrollHeight, maxHeight)}px`;
+      el.style.overflowY = el.scrollHeight > maxHeight ? 'auto' : 'hidden';
+    };
+    fitTextarea();
+    window.visualViewport?.addEventListener('resize', fitTextarea);
+    window.addEventListener('resize', fitTextarea);
+    return () => {
+      window.visualViewport?.removeEventListener('resize', fitTextarea);
+      window.removeEventListener('resize', fitTextarea);
+    };
   }, [prompt]);
 
   // Durable materials (upload first, referenced at session creation) and
@@ -302,6 +314,9 @@ export function ProLaunchPanel({
       if (session.courseRefsAccepted === false) {
         toast.warning(t('workspace.courseMention.notAccepted'));
       }
+      replacePrompt('');
+      setCourseRefs([]);
+      materials.clear();
       onSessionCreated(session.id);
     } catch (error) {
       if (requestGeneration.current !== generation) return;
