@@ -1440,8 +1440,9 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
       async (sceneId: string, actionIndex: number) => {
         const engine = engineRef.current;
         if (!engine || sceneId !== currentSceneId || !currentScene) return;
-        const autoplay = engine.getMode() === 'playing';
-        const jumped = await engine.jumpToAction(actionIndex, { autoplay });
+        // A lecture-note line is an explicit request to hear that narration,
+        // including when playback is currently paused or has finished.
+        const jumped = await engine.jumpToAction(actionIndex, { autoplay: true });
         if (!jumped) return;
         setPlaybackCompleted(false);
         updateCurrentPlaybackActionIndex(actionIndex);
