@@ -12,7 +12,7 @@
   display: none;
 }
 
-@media (max-width: 1023px) and (orientation: portrait) {
+@media (max-width: 1023px), (max-width: 1199px) and (orientation: landscape) {
   .stageGrid {
     overflow: hidden;
     grid-template-areas: 'top' 'center' !important;
@@ -125,7 +125,8 @@
   }
 }
 
-@media (max-width: 1023px) and (orientation: portrait) and (prefers-reduced-motion: reduce) {
+@media (max-width: 1023px) and (prefers-reduced-motion: reduce),
+  (max-width: 1199px) and (orientation: landscape) and (prefers-reduced-motion: reduce) {
   .left,
   .bottom {
     transition: none;
