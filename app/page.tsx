@@ -850,7 +850,14 @@ function HomePage() {
               className="absolute left-full top-0 ml-1.5 mt-[10px] md:ml-2 md:mt-[14px]"
               data-pro-morph="badge"
             >
-              <ProBadge active={false} onToggle={enterWorkbench} />
+              {/* The classic homepage is the default (unchecked) mode. Give the
+                  small wordmark switch a comfortable touch target while keeping
+                  the existing Pro entry point and its swap anchor in place. */}
+              <ProBadge
+                active={false}
+                onToggle={enterWorkbench}
+                className="min-h-8 min-w-10 px-2.5 py-1 text-[10px]"
+              />
             </div>
           ) : null}
         </div>
