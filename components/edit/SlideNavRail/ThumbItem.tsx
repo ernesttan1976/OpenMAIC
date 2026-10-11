@@ -27,7 +27,7 @@ interface ThumbItemProps {
   readonly onActivate: () => void;
   readonly onDuplicate: () => void;
   readonly onDelete: () => void;
-  readonly onEditWithAi?: () => void;
+  readonly onEditWithAi: () => void;
 }
 
 function ThumbItemComponent({
@@ -200,32 +200,30 @@ function ThumbItemComponent({
             )}
           </div>
 
-          {/* Keep the AI slide action directly on the card; management
+          {/* Keep the AI scene action directly on the card; management
               actions stay in the hover-revealed overflow menu. */}
           {!renaming && (
             <div className="flex shrink-0 items-center gap-1">
-              {scene.type === 'slide' && onEditWithAi ? (
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onEditWithAi();
-                  }}
-                  onPointerDown={(e) => e.stopPropagation()}
-                  onKeyDown={(e) => e.stopPropagation()}
-                  aria-label={t('edit.nav.editWithAi')}
-                  title={t('edit.nav.editWithAi')}
-                  data-testid="slide-nav-edit-with-ai"
-                  className={cn(
-                    'shrink-0 rounded p-0.5 text-zinc-400 transition-opacity',
-                    'opacity-100 sm:opacity-0 sm:group-hover/thumb:opacity-100 sm:group-focus-within/thumb:opacity-100',
-                    'hover:bg-violet-100 hover:text-violet-700 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500',
-                    'dark:hover:bg-violet-900/50 dark:hover:text-violet-300',
-                  )}
-                >
-                  <Sparkles className="h-3.5 w-3.5" />
-                </button>
-              ) : null}
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onEditWithAi();
+                }}
+                onPointerDown={(e) => e.stopPropagation()}
+                onKeyDown={(e) => e.stopPropagation()}
+                aria-label={t('edit.nav.editWithAi')}
+                title={t('edit.nav.editWithAi')}
+                data-testid="slide-nav-edit-with-ai"
+                className={cn(
+                  'shrink-0 rounded p-0.5 text-zinc-400 transition-opacity',
+                  'opacity-100 sm:opacity-0 sm:group-hover/thumb:opacity-100 sm:group-focus-within/thumb:opacity-100',
+                  'hover:bg-violet-100 hover:text-violet-700 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500',
+                  'dark:hover:bg-violet-900/50 dark:hover:text-violet-300',
+                )}
+              >
+                <Sparkles className="h-3.5 w-3.5" />
+              </button>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <button
@@ -291,9 +289,9 @@ function ThumbItemComponent({
  * playback `SceneSidebar` — index badge + title row above an aspect-
  * video thumbnail card, whole tile rounded with a violet background +
  * ring when active — so the two sidebars read as the same component
- * family across mode toggle. Editor-only additions: hover-revealed
- * three-dot menu (Rename / Duplicate / Delete) and inline title rename
- * (also reachable via double-click on the title text).
+ * family across mode toggle. Editor-only additions: AI editing for every
+ * scene type, a hover-revealed three-dot menu (Rename / Duplicate / Delete),
+ * and inline title rename (also reachable via double-click on the title text).
  *
  * All scene types are first-class — slides render a live
  * `ThumbnailSlide`, non-slide scenes render the same stylised mockups

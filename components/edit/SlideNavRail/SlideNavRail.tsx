@@ -20,7 +20,10 @@ import {
 import { SCENE_CREATION_ENABLED } from '@/lib/edit/scene-creation-enabled';
 import { CHROME_DURATION_MS, CHROME_EASE, CHROME_EASE_CSS } from '@/lib/edit/transitions';
 import { useInWorkbenchPanel } from '@/lib/workbench/panel-context';
-import { queueEditorMessageForWorkspace, submitFromEditor } from '@/lib/workbench/editor-submit-bridge';
+import {
+  queueEditorMessageForWorkspace,
+  submitFromEditor,
+} from '@/lib/workbench/editor-submit-bridge';
 import type { Scene } from '@/lib/types/stage';
 import { ThumbItem } from './ThumbItem';
 import { InsertionZone } from './InsertionZone';
@@ -42,8 +45,8 @@ const RAIL_MAX_PX = 360;
  * below each tile, inter-thumb "+" insertion zones revealed on hover,
  * and a collapse chevron on the rail/slide boundary. All scene types are
  * first-class — slides render a live `ThumbnailSlide`, non-slide scenes
- * get a type-icon stub but stay clickable, draggable, and right-clickable
- * so page-level management is uniform across the deck.
+ * get a type-icon stub, and every scene has the same AI edit action while
+ * staying clickable, draggable, and right-clickable for uniform management.
  *
  * Visuals: low-chroma zinc surface + single violet brand accent, no
  * per-row chrome (rejected `EditModeSidebar` pattern). Drag uses an
@@ -305,16 +308,27 @@ export function SlideNavRail() {
   const handleSubmitAiEdit = useCallback(async () => {
     const scene = editSceneId ? scenes.find((item) => item.id === editSceneId) : undefined;
     const instruction = editInstruction.trim();
-    if (!stage || !scene || scene.type !== 'slide' || !instruction || editPending) return;
-    const message = [
-      'Edit only the existing slide identified below. Preserve all other slides and course data.',
-      'Use the existing slide-generation edit path and its current persisted slide as context.',
-      'Preserve the slide title and page order unless the request explicitly asks to change them.',
-      `Course/stage ID: ${stage.id}`,
-      `Selected slide ID: ${scene.id}`,
-      `Selected page: ${scene.order} — ${scene.title}`,
-      `User instruction: ${instruction}`,
-    ].join('\n');
+    if (!stage || !scene || !instruction || editPending) return;
+    const message =
+      scene.type === 'slide'
+        ? [
+            'Edit only the existing slide identified below. Preserve all other slides and course data.',
+            'Use the existing slide-generation edit path and its current persisted slide as context.',
+            'Preserve the slide title and page order unless the request explicitly asks to change them.',
+            `Course/stage ID: ${stage.id}`,
+            `Selected slide ID: ${scene.id}`,
+            `Selected page: ${scene.order} — ${scene.title}`,
+            `User instruction: ${instruction}`,
+          ].join('\n')
+        : [
+            `Edit only the existing ${scene.type} scene identified below. Preserve all other scenes and course data.`,
+            'Read the selected scene source and make the smallest appropriate change to its content using the stage editing tools.',
+            'Preserve the scene title and page order unless the request explicitly asks to change them.',
+            `Course/stage ID: ${stage.id}`,
+            `Selected scene ID: ${scene.id}`,
+            `Selected scene: ${scene.order} — ${scene.title} (${scene.type})`,
+            `User instruction: ${instruction}`,
+          ].join('\n');
 
     setEditPending(true);
     setEditError('');
@@ -511,9 +525,7 @@ export function SlideNavRail() {
                       onActivate={() => handleActivate(scene.id)}
                       onDuplicate={() => handleDuplicate(scene.id)}
                       onDelete={() => handleDelete(scene.id)}
-                      onEditWithAi={
-                        scene.type === 'slide' ? () => handleOpenAiEdit(scene.id) : undefined
-                      }
+                      onEditWithAi={() => handleOpenAiEdit(scene.id)}
                     />
                     {SCENE_CREATION_ENABLED && (
                       <InsertionZone

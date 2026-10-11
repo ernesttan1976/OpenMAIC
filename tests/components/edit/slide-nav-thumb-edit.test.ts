@@ -73,7 +73,7 @@ function scene(type: Scene['type']): Scene {
   } as unknown as Scene;
 }
 
-describe('slide thumbnail AI edit action', () => {
+describe('scene thumbnail AI edit action', () => {
   let container: HTMLDivElement;
   let root: Root;
 
@@ -132,22 +132,34 @@ describe('slide thumbnail AI edit action', () => {
     expect(onActivate).not.toHaveBeenCalled();
   });
 
-  it('does not offer the edit action for non-slide scenes', async () => {
-    await act(async () => {
-      root.render(
-        createElement(ThumbItem, {
-          scene: scene('quiz'),
-          index: 0,
-          active: false,
-          canDelete: true,
-          onActivate: vi.fn(),
-          onDuplicate: vi.fn(),
-          onDelete: vi.fn(),
-          onEditWithAi: vi.fn(),
-        }),
-      );
-    });
+  it.each(['quiz', 'interactive', 'pbl'] as const)(
+    'offers the edit action for %s scenes and invokes it without activating the thumbnail',
+    async (type) => {
+      const onEditWithAi = vi.fn();
+      const onActivate = vi.fn();
+      await act(async () => {
+        root.render(
+          createElement(ThumbItem, {
+            scene: scene(type),
+            index: 0,
+            active: false,
+            canDelete: true,
+            onActivate,
+            onDuplicate: vi.fn(),
+            onDelete: vi.fn(),
+            onEditWithAi,
+          }),
+        );
+      });
 
-    expect(container.querySelector('[data-testid="slide-nav-edit-with-ai"]')).toBeNull();
-  });
+      const action = container.querySelector<HTMLButtonElement>(
+        '[data-testid="slide-nav-edit-with-ai"]',
+      );
+      expect(action).toBeTruthy();
+      await act(async () => action!.click());
+
+      expect(onEditWithAi).toHaveBeenCalledOnce();
+      expect(onActivate).not.toHaveBeenCalled();
+    },
+  );
 });
