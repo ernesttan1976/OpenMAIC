@@ -12,6 +12,25 @@
       ],
       "cwd": "/Volumes/MyCrucial/OpenMAIC",
       "enabled": true
+    },
+    "shell": {
+      "type": "local",
+      "command": [
+        "uvx",
+        "--from",
+        "mcp-shell-server==1.1.12",
+        "mcp-shell-server"
+      ],
+      "cwd": ".",
+      "environment": {
+        "ALLOW_COMMANDS": "pnpm,git,pwd",
+        "MCP_SHELL_SAFE_PATH": "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin",
+        "MCP_SHELL_DEFAULT_TIMEOUT_SECONDS": "120",
+        "MCP_SHELL_MAX_TIMEOUT_SECONDS": "600",
+        "MCP_SHELL_CHILD_ENV_ALLOWLIST": "HOME,TMPDIR,LANG,LC_ALL"
+      },
+      "timeout": 660000,
+      "enabled": true
     }
   }
 }
