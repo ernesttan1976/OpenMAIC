@@ -126,7 +126,7 @@ services:
     shm_size: 2gb
     networks:
       - render
-    restart: unless-stopped
+    restart: "no"
 
 networks:
   default: {}
