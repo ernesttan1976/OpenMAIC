@@ -1,5 +1,8 @@
 import type { CSSProperties, ReactNode } from 'react';
 import { cn } from '@/lib/utils';
+import styles from './StageGrid.module.css';
+
+export type MobileEditorPanel = 'slides' | 'timeline' | null;
 
 interface StageGridProps {
   /** Top bar — auto-height row spanning the full width (e.g. CommandBar). */
@@ -13,6 +16,7 @@ interface StageGridProps {
   /** Center cell — fills remaining space, hosts the scene canvas. */
   readonly centerSlot: ReactNode;
   readonly className?: string;
+  readonly mobilePanel?: MobileEditorPanel;
 }
 
 /**
@@ -60,16 +64,36 @@ export function StageGrid({
   bottomSlot,
   centerSlot,
   className,
+  mobilePanel = null,
 }: StageGridProps) {
   return (
-    <div className={cn('h-full w-full', className)} style={GRID_STYLE}>
-      {topSlot ? <div style={{ gridArea: 'top' }}>{topSlot}</div> : null}
-      {leftSlot ? <div style={{ gridArea: 'left' }}>{leftSlot}</div> : null}
-      <div style={{ gridArea: 'center', minHeight: 0, minWidth: 0, position: 'relative' }}>
+    <div
+      className={cn('h-full w-full', styles.stageGrid, className)}
+      style={GRID_STYLE}
+      data-mobile-panel={mobilePanel ?? 'closed'}
+    >
+      {topSlot ? (
+        <div className={styles.top} style={{ gridArea: 'top' }}>
+          {topSlot}
+        </div>
+      ) : null}
+      {leftSlot ? (
+        <div className={styles.left} style={{ gridArea: 'left' }}>
+          {leftSlot}
+        </div>
+      ) : null}
+      <div
+        className={styles.center}
+        style={{ gridArea: 'center', minHeight: 0, minWidth: 0, position: 'relative' }}
+      >
         {centerSlot}
       </div>
       {rightSlot ? <div style={{ gridArea: 'right' }}>{rightSlot}</div> : null}
-      {bottomSlot ? <div style={{ gridArea: 'bottom' }}>{bottomSlot}</div> : null}
+      {bottomSlot ? (
+        <div className={styles.bottom} style={{ gridArea: 'bottom' }}>
+          {bottomSlot}
+        </div>
+      ) : null}
     </div>
   );
 }

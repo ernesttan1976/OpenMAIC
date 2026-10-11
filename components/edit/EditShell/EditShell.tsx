@@ -1,16 +1,16 @@
 'use client';
 
 import { motion, useMotionValue, useReducedMotion } from 'motion/react';
-import { useCallback, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import type { SceneEditorSurface, SurfaceState } from '@/lib/edit/scene-editor-surface';
 import { sceneEditorRegistry } from '@/lib/edit/scene-editor-registry';
 import { NOOP_SURFACE } from '@/lib/edit/noop-surface';
 import type { Scene } from '@/lib/types/stage';
 import { CHROME_DURATION, CHROME_EASE, CHROME_STAGGER } from '@/lib/edit/transitions';
-import { StageGrid } from '@/components/edit/StageGrid';
+import { StageGrid, type MobileEditorPanel } from '@/components/edit/StageGrid';
 import { ContainBox } from '@/components/edit/ContainBox';
 import type { SceneType } from '@/lib/types/stage';
-import { CommandBar } from './CommandBar';
+import { CommandBar, MobileEditorPanelToggles } from './CommandBar';
 import { FloatingInsertToolbar } from './FloatingInsertToolbar';
 import { FloatingToolbar } from './FloatingToolbar';
 import { HintRail } from './HintRail';
@@ -104,11 +104,24 @@ export function EditShell({
   const insertToolbarX = useMotionValue(0);
   const insertToolbarY = useMotionValue(0);
   const [insertToolbarCollapsed, setInsertToolbarCollapsed] = useState(false);
+  const [mobilePanel, setMobilePanel] = useState<MobileEditorPanel>(null);
   const toggleInsertToolbarCollapsed = useCallback(
     () => setInsertToolbarCollapsed((current) => !current),
     [],
   );
+  const toggleMobilePanel = useCallback((panel: Exclude<MobileEditorPanel, null>) => {
+    setMobilePanel((current) => (current === panel ? null : panel));
+  }, []);
   const SurfaceComponent = surface.SurfaceComponent;
+
+  useEffect(() => {
+    if (!mobilePanel) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setMobilePanel(null);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [mobilePanel]);
 
   return (
     <>
@@ -131,6 +144,8 @@ export function EditShell({
         bottomRail={bottomRail}
         pager={pager}
         hideCommandBar={hideCommandBar}
+        mobilePanel={mobilePanel}
+        onToggleMobilePanel={toggleMobilePanel}
       >
         <SurfaceComponent />
         {state && state.insertItems.length > 0 && (
@@ -262,6 +277,8 @@ interface FrameProps {
   readonly bottomRail?: ReactNode;
   readonly pager?: CanvasPagerProps;
   readonly hideCommandBar?: boolean;
+  readonly mobilePanel: MobileEditorPanel;
+  readonly onToggleMobilePanel: (panel: Exclude<MobileEditorPanel, null>) => void;
   readonly children: ReactNode;
 }
 
@@ -275,6 +292,8 @@ function Frame({
   bottomRail,
   pager,
   hideCommandBar,
+  mobilePanel,
+  onToggleMobilePanel,
   children,
 }: FrameProps) {
   const prefersReducedMotion = useReducedMotion();
@@ -300,8 +319,17 @@ function Frame({
   return (
     <StageGrid
       className="bg-gradient-to-b from-zinc-100 to-zinc-200 dark:from-zinc-950 dark:to-zinc-900"
+      mobilePanel={mobilePanel}
       topSlot={
-        hideCommandBar ? null : (
+        hideCommandBar ? (
+          <div className="mobile-editor-standalone-bar flex h-14 items-center justify-end border-b border-zinc-200/60 px-2 dark:border-zinc-800/60">
+            <MobileEditorPanelToggles
+              mobilePanel={mobilePanel}
+              onToggleMobilePanel={onToggleMobilePanel}
+              showTimelineToggle={!!bottomRail}
+            />
+          </div>
+        ) : (
           // `data-maic-edit-chrome`: the workbench's hand-edit signal scope
           // (structure ops live here — undo/redo, insert — while the nav rail
           // is deliberately out of it: switching pages is navigation, not an
@@ -312,7 +340,15 @@ function Frame({
             animate={cmdAnimate}
             transition={{ ...stepTransition, delay: prefersReducedMotion ? 0 : COMMANDBAR_DELAY }}
           >
-            <CommandBar title={title} history={history} commands={commands} trailing={trailing} />
+            <CommandBar
+              title={title}
+              history={history}
+              commands={commands}
+              trailing={trailing}
+              mobilePanel={mobilePanel}
+              onToggleMobilePanel={onToggleMobilePanel}
+              showTimelineToggle={!!bottomRail}
+            />
           </motion.div>
         )
       }

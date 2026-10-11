@@ -1,6 +1,6 @@
 'use client';
 
-import { ArrowLeft, Redo2, Undo2 } from 'lucide-react';
+import { ArrowLeft, PanelLeft, Redo2, Rows3, Undo2 } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import type { ReactNode } from 'react';
 import { Button } from '@/components/ui/button';
@@ -9,6 +9,7 @@ import { useI18n } from '@/lib/hooks/use-i18n';
 import { cn } from '@/lib/utils';
 import type { EditorCommand, SurfaceHistory } from '@/lib/edit/scene-editor-surface';
 import { classroomExitLabelKey, exitClassroom } from '@/lib/workbench/classroom-exit';
+import type { MobileEditorPanel } from '@/components/edit/StageGrid';
 
 interface CommandBarProps {
   readonly title: string;
@@ -20,6 +21,9 @@ interface CommandBarProps {
    * Header is unmounted to keep top chrome to a single bar.
    */
   readonly trailing?: ReactNode;
+  readonly mobilePanel?: MobileEditorPanel;
+  readonly onToggleMobilePanel?: (panel: Exclude<MobileEditorPanel, null>) => void;
+  readonly showTimelineToggle?: boolean;
 }
 
 /**
@@ -33,7 +37,15 @@ interface CommandBarProps {
  * not a one-way state, so we deliberately do *not* place a "Done" pill
  * here that would compete with the Switch's affordance.
  */
-export function CommandBar({ title, history, commands, trailing }: CommandBarProps) {
+export function CommandBar({
+  title,
+  history,
+  commands,
+  trailing,
+  mobilePanel = null,
+  onToggleMobilePanel,
+  showTimelineToggle = false,
+}: CommandBarProps) {
   const { t } = useI18n();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -70,6 +82,13 @@ export function CommandBar({ title, history, commands, trailing }: CommandBarPro
       </div>
 
       <div className="flex shrink-0 items-center gap-2">
+        {onToggleMobilePanel && (
+          <MobileEditorPanelToggles
+            mobilePanel={mobilePanel}
+            onToggleMobilePanel={onToggleMobilePanel}
+            showTimelineToggle={showTimelineToggle}
+          />
+        )}
         {commands && commands.length > 0 && (
           <div className="flex shrink-0 items-center gap-1">
             {commands.map((command) => (
@@ -109,5 +128,40 @@ function IconButton({
       </TooltipTrigger>
       <TooltipContent>{title}</TooltipContent>
     </Tooltip>
+  );
+}
+
+export function MobileEditorPanelToggles({
+  mobilePanel,
+  onToggleMobilePanel,
+  showTimelineToggle,
+}: {
+  readonly mobilePanel: MobileEditorPanel;
+  readonly onToggleMobilePanel: (panel: Exclude<MobileEditorPanel, null>) => void;
+  readonly showTimelineToggle: boolean;
+}) {
+  const { t } = useI18n();
+
+  return (
+    <div className="mobile-editor-panel-toggles flex shrink-0 items-center gap-1">
+      <IconButton
+        title={t('edit.nav.deckLabel')}
+        aria-label={t('edit.nav.deckLabel')}
+        aria-pressed={mobilePanel === 'slides'}
+        onClick={() => onToggleMobilePanel('slides')}
+      >
+        <PanelLeft className="h-4 w-4" />
+      </IconButton>
+      {showTimelineToggle && (
+        <IconButton
+          title={t('edit.timeline.title')}
+          aria-label={t('edit.timeline.title')}
+          aria-pressed={mobilePanel === 'timeline'}
+          onClick={() => onToggleMobilePanel('timeline')}
+        >
+          <Rows3 className="h-4 w-4" />
+        </IconButton>
+      )}
+    </div>
   );
 }
