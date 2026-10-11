@@ -11,7 +11,7 @@ import {
 } from '@/lib/server/agent-runtime/generation-tools';
 import type { Scene } from '@/lib/types/stage';
 
-function slide(id: string, order: number, title = id): Scene {
+function slide(id: string, order: number, title = id): Extract<Scene, { type: 'slide' }> {
   return {
     id,
     stageId: 'stage-test',
@@ -34,7 +34,7 @@ function slide(id: string, order: number, title = id): Scene {
       },
     },
     actions: [],
-  } as Scene;
+  } as unknown as Extract<Scene, { type: 'slide' }>;
 }
 
 function document(scenes: Scene[]): CourseDocument {
@@ -138,6 +138,17 @@ describe('generation and deck tools', () => {
         autoplay: false,
       },
     ] as never;
+    existing.content.canvas.animations = [
+      {
+        id: 'anim-photo',
+        elId: 'photo',
+        type: 'in',
+        effect: 'fadeIn',
+        duration: 0.5,
+        trigger: 'click',
+      },
+    ];
+    existing.content.canvas.turningMode = 'slideX';
     existing.actions = [{ type: 'speech', text: 'Existing narration' }] as never;
     const current = state(document([existing]));
     const prompts: string[] = [];
@@ -146,8 +157,34 @@ describe('generation and deck tools', () => {
       return JSON.stringify({
         elements: [
           { id: 'photo', type: 'image', src: 'img_1', left: 10, top: 20, width: 100, height: 80 },
-          { id: 'clip', type: 'video', src: 'edit_media_1', left: 20, top: 30, width: 200, height: 100 },
-          { id: 'sound', type: 'audio', src: 'edit_media_2', left: 30, top: 40, width: 50, height: 50 },
+          {
+            id: 'clip',
+            type: 'video',
+            src: 'edit_media_1',
+            left: 20,
+            top: 30,
+            width: 200,
+            height: 100,
+          },
+          {
+            id: 'sound',
+            type: 'audio',
+            src: 'edit_media_2',
+            left: 30,
+            top: 40,
+            width: 50,
+            height: 50,
+          },
+        ],
+        animations: [
+          {
+            id: 'anim-photo-edited',
+            elId: 'photo',
+            type: 'attention',
+            effect: 'pulse',
+            duration: 1,
+            trigger: 'auto',
+          },
         ],
         background: null,
         remark: '',
@@ -173,6 +210,8 @@ describe('generation and deck tools', () => {
     expect(prompts).toHaveLength(1);
     expect(prompts[0]).toContain('Volcano photograph');
     expect(prompts[0]).toContain('Existing narration');
+    expect(prompts[0]).toContain('anim-photo');
+    expect(prompts[0]).toContain('turningMode');
     expect(prompts[0]).toContain('img_1');
     expect(prompts[0]).not.toContain('PRIVATE_IMAGE_BYTES');
     expect(prompts[0]).not.toContain('PRIVATE_VIDEO_BYTES');
@@ -189,6 +228,17 @@ describe('generation and deck tools', () => {
     });
     if (saved?.type !== 'slide') throw new Error('expected persisted slide');
     expect(saved.content.canvas.background).toEqual({ type: 'solid', color: '#123456' });
+    expect(saved.content.canvas.animations).toEqual([
+      {
+        id: 'anim-photo-edited',
+        elId: 'photo',
+        type: 'attention',
+        effect: 'pulse',
+        duration: 1,
+        trigger: 'auto',
+      },
+    ]);
+    expect(saved.content.canvas.turningMode).toBe('slideX');
     expect(saved.content.canvas.elements).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -205,6 +255,75 @@ describe('generation and deck tools', () => {
         }),
       ]),
     );
+  });
+
+  it('preserves only surviving animation targets when a visual edit omits animations', async () => {
+    const existing = slide('animated', 1);
+    existing.content.canvas.elements = [
+      { id: 'keep', type: 'text', left: 0, top: 0, width: 100, height: 40, content: 'Keep' },
+      { id: 'remove', type: 'text', left: 0, top: 50, width: 100, height: 40, content: 'Remove' },
+    ] as never;
+    existing.content.canvas.animations = [
+      {
+        id: 'keep-animation',
+        elId: 'keep',
+        type: 'in',
+        effect: 'fadeIn',
+        duration: 1,
+        trigger: 'click',
+      },
+      {
+        id: 'remove-animation',
+        elId: 'remove',
+        type: 'out',
+        effect: 'fadeOut',
+        duration: 1,
+        trigger: 'auto',
+      },
+    ];
+    const current = state(document([existing]));
+    const generate = find(
+      buildGenerationTools(
+        deps(current.store, {
+          aiCall: vi.fn(async () =>
+            JSON.stringify({
+              elements: [
+                {
+                  id: 'keep',
+                  type: 'text',
+                  left: 0,
+                  top: 0,
+                  width: 120,
+                  height: 40,
+                  content: 'Keep updated',
+                },
+              ],
+              background: null,
+              remark: '',
+            }),
+          ),
+        }),
+      ),
+      'generate_scene',
+    );
+
+    const response = await generate.execute('content-edit', {
+      stageId: 'stage-test',
+      sceneId: 'animated',
+      order: 1,
+      title: 'animated',
+      type: 'slide',
+      brief: 'Update the slide content',
+      instruction: 'Make the remaining text more concise',
+    } as never);
+
+    expect(response).not.toMatchObject({ isError: true });
+    expect(current.get()?.scenes[0]?.content).toMatchObject({
+      canvas: {
+        elements: [expect.objectContaining({ id: 'keep' })],
+        animations: [expect.objectContaining({ id: 'keep-animation', elId: 'keep' })],
+      },
+    });
   });
 
   it('regenerates actions with the live page/course context when explicitly requested', async () => {
@@ -303,7 +422,10 @@ describe('generation and deck tools', () => {
       isError: true,
       details: { error: 'scene-not-found' },
     });
-    expect(wrongTypeResponse).toMatchObject({ isError: true, details: { error: 'scene-not-slide' } });
+    expect(wrongTypeResponse).toMatchObject({
+      isError: true,
+      details: { error: 'scene-not-slide' },
+    });
     expect(aiCall).not.toHaveBeenCalled();
     expect(current.store.putScene).not.toHaveBeenCalled();
   });
@@ -312,15 +434,16 @@ describe('generation and deck tools', () => {
     const current = state(document([slide('existing', 1)]));
     const aiCall = vi.fn(async () => {
       const live = current.get()?.scenes[0];
-      if (live?.type === 'slide') live.content.canvas.elements.push({
-        id: 'concurrent',
-        type: 'text',
-        left: 0,
-        top: 0,
-        width: 100,
-        height: 40,
-        content: 'Concurrent edit',
-      } as never);
+      if (live?.type === 'slide')
+        live.content.canvas.elements.push({
+          id: 'concurrent',
+          type: 'text',
+          left: 0,
+          top: 0,
+          width: 100,
+          height: 40,
+          content: 'Concurrent edit',
+        } as never);
       return JSON.stringify({ elements: [], background: null, remark: '' });
     });
     const generate = find(buildGenerationTools(deps(current.store, { aiCall })), 'generate_scene');
@@ -539,6 +662,108 @@ describe('generation and deck tools', () => {
       }
     },
   );
+
+  it.each([
+    [
+      'malformed animation fields',
+      [
+        {
+          id: 'anim',
+          elId: 'target',
+          type: 'invalid',
+          effect: 'fadeIn',
+          duration: 1,
+          trigger: 'click',
+        },
+      ],
+    ],
+    [
+      'duplicate animation ids',
+      [
+        { id: 'anim', elId: 'target', type: 'in', effect: 'fadeIn', duration: 1, trigger: 'click' },
+        {
+          id: 'anim',
+          elId: 'target',
+          type: 'out',
+          effect: 'fadeOut',
+          duration: 1,
+          trigger: 'auto',
+        },
+      ],
+    ],
+    [
+      'references to missing elements',
+      [
+        {
+          id: 'anim',
+          elId: 'missing',
+          type: 'in',
+          effect: 'fadeIn',
+          duration: 1,
+          trigger: 'click',
+        },
+      ],
+    ],
+  ])('does not persist %s from a slide edit', async (_caseName, animations) => {
+    const existing = slide('animated', 1);
+    existing.content.canvas.elements = [
+      { id: 'target', type: 'text', left: 0, top: 0, width: 100, height: 40, content: 'Original' },
+    ] as never;
+    existing.content.canvas.animations = [
+      {
+        id: 'old-animation',
+        elId: 'target',
+        type: 'in',
+        effect: 'fadeIn',
+        duration: 1,
+        trigger: 'click',
+      },
+    ];
+    const current = state(document([existing]));
+    const generate = find(
+      buildGenerationTools(
+        deps(current.store, {
+          aiCall: vi.fn(async () =>
+            JSON.stringify({
+              elements: [
+                {
+                  id: 'target',
+                  type: 'text',
+                  left: 0,
+                  top: 0,
+                  width: 100,
+                  height: 40,
+                  content: 'Updated',
+                },
+              ],
+              animations,
+              background: null,
+              remark: '',
+            }),
+          ),
+        }),
+      ),
+      'generate_scene',
+    );
+    const before = structuredClone(current.get());
+
+    const response = await generate.execute('invalid-animation', {
+      stageId: 'stage-test',
+      sceneId: 'animated',
+      order: 1,
+      title: 'animated',
+      type: 'slide',
+      brief: 'Edit slide',
+      instruction: 'Change the animation',
+    } as never);
+
+    expect(response).toMatchObject({
+      isError: true,
+      details: { error: 'invalid-model-output', sceneId: 'animated' },
+    });
+    expect(current.get()).toEqual(before);
+    expect(current.store.putScene).not.toHaveBeenCalled();
+  });
 
   it('refuses destructive PBL type changes and unresolved generation media', async () => {
     const pbl = slide('project', 1, 'Project') as Scene;

@@ -1,3 +1,5 @@
+import type { PPTAnimation } from '@openmaic/dsl';
+
 /**
  * Type definitions for the generation pipeline.
  */
@@ -46,6 +48,7 @@ export interface GeneratedSlideData {
       rotate: number;
     };
   };
+  animations?: PPTAnimation[];
   remark?: string;
 }
 

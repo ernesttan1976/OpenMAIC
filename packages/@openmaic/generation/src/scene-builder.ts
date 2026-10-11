@@ -49,6 +49,7 @@ export function buildCompleteScene(
       theme: defaultTheme,
       elements: content.elements,
       background: content.background,
+      ...(content.animations !== undefined ? { animations: content.animations } : {}),
     };
     return {
       id: sceneId,

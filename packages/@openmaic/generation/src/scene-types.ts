@@ -3,6 +3,7 @@ import type {
   InteractiveContent,
   PBLContent,
   PBLProject,
+  PPTAnimation,
   PPTElement,
   QuizContent,
   QuizQuestion,
@@ -17,6 +18,8 @@ import type {
 export interface GeneratedSlideContent {
   elements: PPTElement[];
   background?: SlideBackground;
+  /** Optional to preserve compatibility with existing generation responses. */
+  animations?: PPTAnimation[];
   remark?: string;
 }
 

@@ -19,8 +19,12 @@ function slideScene(): Pick<Scene, 'content' | 'actions'> {
         viewportSize: 1234,
         viewportRatio: 0.5625,
         theme: { fontName: 'KeepMe' },
-        elements: [{ id: 'e_old' }],
-        animations: [{ id: 'anim_old', elId: 'e_old', type: 'in', effect: 'fadeIn' }],
+        elements: [{ id: 'e_old' }, { id: 'e_unchanged' }],
+        animations: [
+          { id: 'anim_old', elId: 'e_old', type: 'in', effect: 'fadeIn' },
+          { id: 'anim_unchanged', elId: 'e_unchanged', type: 'in', effect: 'fadeIn' },
+        ],
+        turningMode: 'fade',
       },
     } as unknown as SceneContent,
     actions: [{ type: 'speech', id: 'a_old' } as never],
@@ -60,10 +64,7 @@ describe('toRuntimeSlideContent', () => {
     expect(rt.canvas.schemaVersion).toBeUndefined();
   });
 
-  it('clears stale animations referencing the replaced (now-gone) element ids', () => {
-    // The existing canvas has animations bound to old element ids. Every regen
-    // element gets a brand-new id, so preserving the animations would strand
-    // them — they must be cleared.
+  it('filters existing animations whose target element ids are no longer present', () => {
     const existingCanvas = {
       id: 'cv',
       animations: [{ id: 'anim_old', elId: 'e_old', type: 'in', effect: 'fadeIn' }],
@@ -72,6 +73,46 @@ describe('toRuntimeSlideContent', () => {
       canvas: Record<string, unknown>;
     };
     expect(rt.canvas.animations).toEqual([]);
+  });
+
+  it('preserves prior animations for returned unchanged element ids and turningMode', () => {
+    const generated: GeneratedSlideContent = {
+      elements: [
+        { id: 'e_unchanged', type: 'text', left: 0, top: 0, width: 1, height: 1 } as never,
+      ],
+    };
+    const scene = slideScene();
+    const rt = toRuntimeSlideContent(
+      generated,
+      (scene.content as unknown as { canvas: Record<string, unknown> }).canvas,
+    ) as unknown as { canvas: Record<string, unknown> };
+    expect(rt.canvas.animations).toEqual([
+      { id: 'anim_unchanged', elId: 'e_unchanged', type: 'in', effect: 'fadeIn' },
+    ]);
+    expect(rt.canvas.turningMode).toBe('fade');
+  });
+
+  it('uses generated animations when returned, including an explicit empty list', () => {
+    const generated: GeneratedSlideContent = {
+      elements: [{ id: 'e_new', type: 'text', left: 0, top: 0, width: 1, height: 1 } as never],
+      animations: [
+        {
+          id: 'anim_new',
+          elId: 'e_new',
+          type: 'attention',
+          effect: 'pulse',
+          duration: 1,
+          trigger: 'click',
+        },
+      ],
+    };
+    const rt = toRuntimeSlideContent(generated) as unknown as { canvas: Record<string, unknown> };
+    const explicitEmpty = toRuntimeSlideContent(
+      { ...GEN, animations: [] },
+      { animations: [{ id: 'old', elId: 'e_new' }] },
+    ) as unknown as { canvas: Record<string, unknown> };
+    expect(rt.canvas.animations).toEqual(generated.animations);
+    expect(explicitEmpty.canvas.animations).toEqual([]);
   });
 
   it('keeps the existing background when the gen omits it (no wipe)', () => {
@@ -108,7 +149,7 @@ describe('planRegenerateApply', () => {
     };
     expect(patch.content.canvas.elements[0].id).toBe('e_new');
     expect(patch.actions[0].id).toBe('a_new');
-    // Stale animations bound to the replaced element ids are cleared.
+    // Old animations whose targets are absent from the replacement are removed.
     expect(patch.content.canvas.animations).toEqual([]);
     // ...while the snapshot retains the original animations for restore.
     expect(

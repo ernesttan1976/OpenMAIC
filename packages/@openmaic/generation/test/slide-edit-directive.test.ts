@@ -52,6 +52,16 @@ const BASELINE: GeneratedSlideContent = {
       rotate: 0,
     },
   ],
+  animations: [
+    {
+      id: 'anim_baseline',
+      elId: 'text_baseline',
+      type: 'in',
+      effect: 'fadeIn',
+      duration: 0.5,
+      trigger: 'click',
+    },
+  ],
   background: undefined,
   remark: '',
 };
@@ -72,6 +82,9 @@ describe('slide content edit-mode directive', () => {
     // The baseline slide is serialized into the prompt so content-specific
     // instructions ("drop the 2nd bullet") operate on the real slide.
     expect(lastUser()).toContain('BASELINE-ELEMENT-SENTINEL');
+    expect(lastUser()).toContain('anim_baseline');
+    expect(lastUser()).toContain('unchanged element');
+    expect(lastUser()).toContain('turningMode');
   });
 
   it('leaves the slide content prompt unchanged when no editDirective is given', async () => {
@@ -167,5 +180,110 @@ describe('slide content edit-mode directive', () => {
     // An image element is present, so the KEEP-images rule applies.
     expect(prompt).toContain('"type":"image"');
     expect(prompt).toContain('KEEP them');
+  });
+
+  it('keeps returned animation ids bound to stable edited element ids', async () => {
+    const { aiCall } = makeCapturingAiCall(
+      JSON.stringify({
+        elements: [
+          {
+            id: 'text_baseline',
+            type: 'text',
+            left: 0,
+            top: 0,
+            width: 100,
+            height: 40,
+            content: '<p>Updated</p>',
+          },
+        ],
+        animations: [
+          {
+            id: 'anim_updated',
+            elId: 'text_baseline',
+            type: 'attention',
+            effect: 'pulse',
+            duration: 1,
+            trigger: 'auto',
+          },
+        ],
+        background: null,
+        remark: '',
+      }),
+    );
+
+    const result = await generateSceneContent(slideOutline(), aiCall, {
+      editDirective: 'Add a subtle emphasis animation',
+      baselineContent: BASELINE,
+    });
+    if (!result || !('elements' in result)) throw new Error('expected generated slide content');
+    expect(result?.elements[0]?.id).toBe('text_baseline');
+    expect(result?.animations).toEqual([
+      {
+        id: 'anim_updated',
+        elId: 'text_baseline',
+        type: 'attention',
+        effect: 'pulse',
+        duration: 1,
+        trigger: 'auto',
+      },
+    ]);
+  });
+
+  it.each([
+    ['malformed animation shape', [{ id: 'a', elId: 'text_baseline', type: 'in' }]],
+    [
+      'duplicate animation ids',
+      [
+        {
+          id: 'a',
+          elId: 'text_baseline',
+          type: 'in',
+          effect: 'fadeIn',
+          duration: 1,
+          trigger: 'click',
+        },
+        {
+          id: 'a',
+          elId: 'text_baseline',
+          type: 'out',
+          effect: 'fadeOut',
+          duration: 1,
+          trigger: 'auto',
+        },
+      ],
+    ],
+    [
+      'missing element references',
+      [{ id: 'a', elId: 'missing', type: 'in', effect: 'fadeIn', duration: 1, trigger: 'click' }],
+    ],
+  ])('rejects %s without returning slide content', async (_caseName, animations) => {
+    const { aiCall } = makeCapturingAiCall(
+      JSON.stringify({
+        elements: [
+          {
+            id: 'text_baseline',
+            type: 'text',
+            left: 0,
+            top: 0,
+            width: 100,
+            height: 40,
+            content: '<p>Updated</p>',
+          },
+        ],
+        animations,
+        background: null,
+        remark: '',
+      }),
+    );
+    let failure: string | undefined;
+    const result = await generateSceneContent(slideOutline(), aiCall, {
+      editDirective: 'Change the animation',
+      baselineContent: BASELINE,
+      onFailure: ({ code }) => {
+        failure = code;
+      },
+    });
+    expect(result).toBeNull();
+    expect(failure).toBe('invalid-model-output');
   });
 });

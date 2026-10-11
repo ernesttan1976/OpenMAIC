@@ -51,6 +51,16 @@ const BASELINE: GeneratedSlideContent = {
       rotate: 0,
     },
   ],
+  animations: [
+    {
+      id: 'anim_baseline',
+      elId: 'text_baseline',
+      type: 'in',
+      effect: 'fadeIn',
+      duration: 0.5,
+      trigger: 'click',
+    },
+  ],
   background: undefined,
   remark: '',
 };
@@ -71,6 +81,9 @@ describe('slide content edit-mode directive', () => {
     // The baseline slide is serialized into the prompt so content-specific
     // instructions ("drop the 2nd bullet") operate on the real slide.
     expect(lastUser()).toContain('BASELINE-ELEMENT-SENTINEL');
+    expect(lastUser()).toContain('anim_baseline');
+    expect(lastUser()).toContain('unchanged element');
+    expect(lastUser()).toContain('turningMode');
   });
 
   it('adds the complete server-built scene context as explicitly untrusted data', async () => {

@@ -318,7 +318,10 @@ function prepareSceneEdit(scene: Scene): PreparedSceneEdit {
   const safeScene = project(scene) as Scene;
   const baseline = {
     elements: safeScene.content.type === 'slide' ? safeScene.content.canvas.elements : [],
-    background: safeScene.content.type === 'slide' ? safeScene.content.canvas.background : undefined,
+    background:
+      safeScene.content.type === 'slide' ? safeScene.content.canvas.background : undefined,
+    animations:
+      safeScene.content.type === 'slide' ? safeScene.content.canvas.animations : undefined,
     remark: '',
   };
   return {
@@ -369,7 +372,7 @@ export function buildGenerationTools(deps: GenerationToolDeps): AgentTool<never,
     name: 'generate_scene',
     label: 'Generate page',
     description:
-      'Generate and durably persist one page from an explicit title, type, and brief. Reusing an order replaces that page. For an existing slide edit, pass sceneId; the current scene order is authoritative. Preserve its title/background unless the user explicitly requests a change, and set regenerateActions only for requested narration/action changes. Interactive pages accept widgetType (simulation/diagram/code/game/visualization3d) plus a matching widgetOutline object; both are rejected for other page types.',
+      'Generate and durably persist one page from an explicit title, type, and brief. Reusing an order replaces that page. For an existing slide edit, pass sceneId; the current scene order is authoritative. Preserve its title/background and element animations unless the user explicitly requests changes; retain ids for unchanged elements. Preserve slide transitions and actions unless explicitly asked to change them. Set regenerateActions only for requested narration/action changes. Interactive pages accept widgetType (simulation/diagram/code/game/visualization3d) plus a matching widgetOutline object; both are rejected for other page types.',
     parameters: SceneParams,
     async execute(_callId, params, signal) {
       if (!Number.isInteger(params.order) || params.order < 1) {
@@ -644,6 +647,7 @@ export function buildGenerationTools(deps: GenerationToolDeps): AgentTool<never,
       let scene = built as Scene;
       if (params.sceneId && currentTarget?.type === 'slide' && scene.type === 'slide') {
         const sourceCanvas = currentTarget.content.canvas;
+        const generatedElements = scene.content.canvas.elements;
         scene = {
           ...currentTarget,
           ...scene,
@@ -664,6 +668,11 @@ export function buildGenerationTools(deps: GenerationToolDeps): AgentTool<never,
               viewportSize: sourceCanvas.viewportSize,
               viewportRatio: sourceCanvas.viewportRatio,
               theme: sourceCanvas.theme,
+              animations:
+                scene.content.canvas.animations ??
+                sourceCanvas.animations?.filter((animation) =>
+                  generatedElements.some((element) => element.id === animation.elId),
+                ),
               background: params.changeBackground
                 ? scene.content.canvas.background
                 : (scene.content.canvas.background ?? sourceCanvas.background),

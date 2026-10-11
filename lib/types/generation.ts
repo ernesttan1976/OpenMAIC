@@ -196,7 +196,7 @@ export interface SceneOutline {
 
 // ==================== Stage 3 Output: Generated Content ====================
 
-import type { PPTElement, SlideBackground } from '@openmaic/dsl';
+import type { PPTAnimation, PPTElement, SlideBackground } from '@openmaic/dsl';
 import type { QuizQuestion } from './stage';
 
 /**
@@ -205,6 +205,7 @@ import type { QuizQuestion } from './stage';
 export interface GeneratedSlideContent {
   elements: PPTElement[];
   background?: SlideBackground;
+  animations?: PPTAnimation[];
   remark?: string;
 }
 

@@ -28,7 +28,7 @@ vi.mock('@/components/ui/dropdown-menu', () => ({
     children,
     onSelect,
     ...props
-    }: ButtonHTMLAttributes<HTMLButtonElement> & {
+  }: ButtonHTMLAttributes<HTMLButtonElement> & {
     onSelect?: (event: MouseEvent<HTMLButtonElement>) => void;
   }) => createElement('button', { ...props, onClick: onSelect }, children),
   DropdownMenuTrigger: ({ children }: { children: ReactNode }) => children,
@@ -58,10 +58,19 @@ function scene(type: Scene['type']): Scene {
     type,
     content:
       type === 'slide'
-        ? { type: 'slide', canvas: { id: 'canvas-1', viewportSize: 1000, viewportRatio: 0.5625, theme: {}, elements: [] } }
+        ? {
+            type: 'slide',
+            canvas: {
+              id: 'canvas-1',
+              viewportSize: 1000,
+              viewportRatio: 0.5625,
+              theme: {},
+              elements: [],
+            },
+          }
         : ({ type } as never),
     actions: [],
-  } as Scene;
+  } as unknown as Scene;
 }
 
 describe('slide thumbnail AI edit action', () => {
@@ -82,10 +91,26 @@ describe('slide thumbnail AI edit action', () => {
   it('offers the edit action for slides and invokes it without activating the thumbnail', async () => {
     const onEditWithAi = vi.fn();
     const onActivate = vi.fn();
+    const animatedSlide = scene('slide');
+    if (animatedSlide.content.type === 'slide') {
+      animatedSlide.content.canvas.elements = [
+        { id: 'element-1', type: 'text', left: 0, top: 0, width: 10, height: 10 },
+      ] as never;
+      animatedSlide.content.canvas.animations = [
+        {
+          id: 'animation-1',
+          elId: 'element-1',
+          type: 'in',
+          effect: 'fadeIn',
+          duration: 1,
+          trigger: 'click',
+        },
+      ];
+    }
     await act(async () => {
       root.render(
         createElement(ThumbItem, {
-          scene: scene('slide'),
+          scene: animatedSlide,
           index: 0,
           active: false,
           canDelete: true,

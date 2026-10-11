@@ -25,8 +25,9 @@ const DEFAULT_THEME = {
 
 /**
  * Convert generated slide content to runtime SlideContent, preserving the
- * scene's EXISTING canvas (id / viewport / theme) and overriding only the
- * elements + background. Mints a default canvas only when the scene has none.
+ * scene's EXISTING canvas (id / viewport / theme) and overriding elements,
+ * background, and animation metadata. Mints a default canvas only when the
+ * scene has none.
  */
 export function toRuntimeSlideContent(
   gen: GeneratedSlideContent,
@@ -38,6 +39,14 @@ export function toRuntimeSlideContent(
     viewportRatio: 0.5625,
     theme: DEFAULT_THEME,
   };
+  const elementIds = new Set(
+    gen.elements.map((element) => element.id).filter((id): id is string => typeof id === 'string'),
+  );
+  const previousAnimations = Array.isArray(base.animations)
+    ? (base.animations as Array<{ elId?: unknown }>).filter(
+        (animation) => typeof animation.elId === 'string' && elementIds.has(animation.elId),
+      )
+    : [];
   return {
     type: 'slide',
     // schemaVersion belongs at the SlideContent top level (sibling of `canvas`),
@@ -47,12 +56,7 @@ export function toRuntimeSlideContent(
     canvas: {
       ...base,
       elements: gen.elements,
-      // Replacing ALL elements with freshly-minted ids strands any persisted
-      // animations on `base` — they reference element ids that no longer exist
-      // (mirrors how slide edit ops drop animations whose elId is deleted).
-      // Every new element has a brand-new id, so nothing survives a filter;
-      // clear the array.
-      animations: [],
+      animations: gen.animations !== undefined ? gen.animations : previousAnimations,
       // Only override background when defined — a regen that omits background
       // must not wipe the scene's existing background.
       ...(gen.background !== undefined ? { background: gen.background } : {}),
