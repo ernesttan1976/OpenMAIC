@@ -2,6 +2,8 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { getRequestUser } from '@/lib/auth/request-user';
 import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
+import Link from 'next/link';
+import { isAdminUser } from '@/lib/auth/users';
 
 function userInitials(name: string | null, email: string): string {
   return (name || email)
@@ -31,6 +33,12 @@ export default async function ProfilePage() {
             <p className="truncate text-sm text-muted-foreground">{user.email}</p>
           </div>
         </div>
+        {isAdminUser(user) && (
+          <nav className="mt-8 flex flex-wrap gap-3 border-t pt-6">
+            <Link className="rounded-lg border px-4 py-2 text-sm font-medium hover:bg-muted" href="/admin/users">Manage users</Link>
+            <Link className="rounded-lg border px-4 py-2 text-sm font-medium hover:bg-muted" href="/admin/courses">Manage courses</Link>
+          </nav>
+        )}
       </section>
     </main>
   );

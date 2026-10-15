@@ -216,6 +216,9 @@ function clearedStageState(state: Pick<StageState, 'generationEpoch'>) {
     stage: null,
     scenes: [],
     currentSceneId: null,
+    isOwner: true,
+    canEdit: true,
+    readOnly: false,
     chats: [],
     chatSnapshot: { sessions: [], restoreMarker: null },
     outlines: [],
@@ -321,6 +324,7 @@ interface StageState {
    * deliberately NOT persisted with the document.
    */
   isOwner: boolean;
+  canEdit: boolean;
   readOnly: boolean;
 
   /**
@@ -370,7 +374,7 @@ interface StageState {
    * reference's classroom rule: a visitor who is not the owner gets a
    * read-only classroom.
    */
-  setViewerAccess: (access: { isOwner: boolean }) => void;
+  setViewerAccess: (access: { isOwner: boolean; canEdit?: boolean }) => void;
   setGenerationStatus: (status: 'idle' | 'generating' | 'paused' | 'completed' | 'error') => void;
   setCurrentGeneratingOrder: (order: number) => void;
   bumpGenerationEpoch: () => void;
@@ -511,6 +515,7 @@ const useStageStoreBase = create<StageState>()((set, get) => ({
   generationContext: undefined,
   outlineProducer: null,
   isOwner: true,
+  canEdit: true,
   readOnly: false,
   generationEpoch: 0,
   generationStatus: 'idle' as const,
@@ -582,6 +587,9 @@ const useStageStoreBase = create<StageState>()((set, get) => ({
       stage,
       scenes: [],
       currentSceneId: null,
+      isOwner: true,
+      canEdit: true,
+      readOnly: false,
       chats: [],
       chatSnapshot: { sessions: [], restoreMarker: null },
       generationComplete: false,
@@ -825,8 +833,8 @@ const useStageStoreBase = create<StageState>()((set, get) => ({
     if (isDeckComplete({ outlines, scenes, failedOutlines })) get().setGenerationComplete(true);
   },
 
-  setViewerAccess: ({ isOwner }) => {
-    set({ isOwner, readOnly: !isOwner });
+  setViewerAccess: ({ isOwner, canEdit = isOwner }) => {
+    set({ isOwner, canEdit, readOnly: !canEdit });
   },
 
   setGenerationStatus: (generationStatus) => set({ generationStatus }),

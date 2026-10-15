@@ -121,10 +121,12 @@ export default function ClassroomDetailPage() {
           noteStageGenerationOwnership(classroomId, ownership);
           if (result.outcome === 'found') {
             noteStageOwnership(classroomId, true, {
-              isOwner: result.meta.canEdit,
+              isOwner: result.meta.isOwner,
+              canEdit: result.meta.canEdit,
             });
             useStageStore.getState().setViewerAccess({
-              isOwner: result.meta.canEdit,
+              isOwner: result.meta.isOwner,
+              canEdit: result.meta.canEdit,
             });
           } else if (result.outcome === 'unavailable') {
             // A silent sidecar is not "this is a stranger's course": record

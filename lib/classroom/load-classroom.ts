@@ -303,7 +303,8 @@ export function applyClassroomStageAndScenes(
     chatSnapshot: options.chatSnapshot ?? { sessions: [], restoreMarker: null },
     generationComplete: false,
     isOwner: access.isOwner,
-    readOnly: !access.isOwner,
+    canEdit: access.canEdit,
+    readOnly: !access.canEdit,
     generationEpoch: state.generationEpoch + 1,
     mode: 'playback',
   }));

@@ -10,6 +10,7 @@
  * generation-complete) go through.
  */
 import { getServerPersistenceProvider } from '@/lib/persistence/server-provider';
+import { stageRole } from '@/lib/persistence/stage-collaborators';
 
 /** The minimal query surface this module needs; keeps it pool-agnostic for tests. */
 export interface StageAccessQueryable {
@@ -131,4 +132,17 @@ export async function resolveStageAccess(
   const access = await readStageAccessIncludingDeleted(stageId, queryable);
   if (!access || access.deletedAt !== null) return null;
   return access;
+}
+
+/** True when a signed-in account may read a live course or an administrator is asking. */
+export async function canViewStageForUser(
+  stageId: string,
+  userId: string,
+  admin = false,
+  queryable?: StageAccessQueryable,
+): Promise<boolean> {
+  const db = queryable ?? (await getStageAccessDb());
+  const access = await resolveStageAccess(stageId, db);
+  if (!access) return false;
+  return admin || (await stageRole(db, stageId, userId)) !== 'none';
 }

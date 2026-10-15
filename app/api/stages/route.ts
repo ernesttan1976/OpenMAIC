@@ -22,6 +22,7 @@ import { ownerJson } from '@/lib/server/agent-runtime/route-response';
 import { STAGE_NAME_MAX_LENGTH } from '@/lib/server/agent-runtime/stage-limits';
 import { withRequestOwnerId } from '@/lib/server/agent-runtime/with-owner';
 import { getStageAccessDb } from '@/lib/server/stage-access';
+import { isAdminUser } from '@/lib/auth/users';
 
 export const runtime = 'nodejs';
 
@@ -41,15 +42,17 @@ interface SharedStageRow extends Record<string, unknown> {
   scene_count: number | string;
   folder_id: string | null;
   is_owner: boolean;
-  role: 'owner' | 'editor' | 'viewer';
+  role: 'owner' | 'editor' | 'viewer' | 'admin';
+  is_admin: boolean;
 }
 
 // GET /api/stages — list courses available to this account.
 export async function GET(req: NextRequest) {
   if (!isAgentRuntimeConfigured()) return new Response('Not found', { status: 404 });
 
-  return withRequestOwnerId(req, async (ownerId, responseHeaders) => {
+  return withRequestOwnerId(req, async (ownerId, responseHeaders, user) => {
     const db = await getStageAccessDb();
+    const admin = isAdminUser(user);
     const result = await db.query<SharedStageRow>(
       `SELECT stages.id,
               stages.name,
@@ -61,16 +64,17 @@ export async function GET(req: NextRequest) {
               CASE WHEN meta.owner_id = $1 THEN stages.folder_id ELSE NULL END AS folder_id,
               COUNT(scenes.id)::text AS scene_count,
               (meta.owner_id = $1) AS is_owner,
-              CASE WHEN meta.owner_id = $1 THEN 'owner' ELSE collaborators.role END AS role
+              CASE WHEN meta.owner_id = $1 THEN 'owner' ELSE collaborators.role END AS role,
+              $2::boolean AS is_admin
          FROM stage_meta AS meta
           JOIN document_stages AS stages ON stages.id = meta.stage_id
           LEFT JOIN stage_collaborators AS collaborators
             ON collaborators.stage_id = meta.stage_id AND collaborators.user_id = $1
           LEFT JOIN document_scenes AS scenes ON scenes.stage_id = stages.id
-         WHERE meta.deleted_at IS NULL AND (meta.owner_id = $1 OR collaborators.user_id IS NOT NULL)
+         WHERE meta.deleted_at IS NULL AND ($2::boolean OR meta.owner_id = $1 OR collaborators.user_id IS NOT NULL)
          GROUP BY stages.id, meta.owner_id, collaborators.role
         ORDER BY stages.updated_at DESC, stages.id ASC`,
-      [ownerId],
+      [ownerId, admin],
     );
     const stages = result.rows.map((row) => ({
       id: row.id,
@@ -81,10 +85,11 @@ export async function GET(req: NextRequest) {
       createdAt: Number(row.created_at),
       updatedAt: Number(row.updated_at),
       sceneCount: Number(row.scene_count),
-       ...(row.folder_id === null ? {} : { folderId: row.folder_id }),
-       isOwner: row.is_owner === true,
-       role: row.role,
-       canEdit: row.role === 'owner' || row.role === 'editor',
+      ...(row.folder_id === null ? {} : { folderId: row.folder_id }),
+      isOwner: row.is_owner === true,
+      role: row.is_admin && !row.is_owner ? 'admin' : row.role,
+      canEdit: row.is_owner === true || row.is_admin,
+      isAdmin: row.is_admin === true,
     }));
     return ownerJson({ stages }, 200, responseHeaders);
   });

@@ -29,8 +29,8 @@ export async function POST(req: NextRequest, { params }: Params) {
   let body: { email?: unknown; role?: unknown };
   try { body = await req.json(); } catch { return Response.json({ error: 'Invalid JSON' }, { status: 400 }); }
   const email = typeof body.email === 'string' ? body.email.trim().toLowerCase() : '';
-  const role = body.role === 'editor' || body.role === 'viewer' ? body.role : null;
-  if (!email || !role) return Response.json({ error: 'email and a viewer/editor role are required' }, { status: 400 });
+  const role = body.role === undefined || body.role === 'viewer' ? 'viewer' : null;
+  if (!email || !role) return Response.json({ error: 'email and the viewer role are required' }, { status: 400 });
   return withRequestOwnerId(req, async (userId) => {
     const { id } = await params;
     const db = await requireOwner(id, userId);

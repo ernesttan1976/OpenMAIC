@@ -12,6 +12,7 @@ import { isAgentRuntimeConfigured } from '@/lib/config/feature-flags';
 import { markStageGenerationComplete } from '@/lib/persistence/stage-meta';
 import { getStageAccessDb, resolveStageAccess } from '@/lib/server/stage-access';
 import { withRequestOwnerId } from '@/lib/server/agent-runtime/with-owner';
+import { isAdminUser } from '@/lib/auth/users';
 
 export const runtime = 'nodejs';
 
@@ -20,7 +21,7 @@ type Params = { params: Promise<{ id: string }> };
 export async function POST(req: NextRequest, { params }: Params) {
   if (!isAgentRuntimeConfigured()) return new Response('Not found', { status: 404 });
 
-  return withRequestOwnerId(req, async (ownerId, responseHeaders) => {
+  return withRequestOwnerId(req, async (ownerId, responseHeaders, user) => {
     const { id: stageId } = await params;
     try {
       const access = await resolveStageAccess(stageId);
@@ -33,7 +34,7 @@ export async function POST(req: NextRequest, { params }: Params) {
       }
 
       // Owner only.
-      if (access.ownerId !== ownerId) {
+      if (access.ownerId !== ownerId && !isAdminUser(user)) {
         return NextResponse.json({ error: 'forbidden' }, { status: 403, headers: responseHeaders });
       }
 

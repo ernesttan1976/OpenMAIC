@@ -29,18 +29,19 @@ import { withRequestOwnerId } from '@/lib/server/agent-runtime/with-owner';
 import { STAGE_NAME_MAX_LENGTH } from '@/lib/server/agent-runtime/stage-limits';
 import { getStageAccessDb, resolveStageAccess } from '@/lib/server/stage-access';
 import { stageRole } from '@/lib/persistence/stage-collaborators';
+import { isAdminUser } from '@/lib/auth/users';
 
 export const runtime = 'nodejs';
 
 type Params = { params: Promise<{ id: string }> };
 
-async function accessFor(stageId: string, userId: string, write = false) {
+async function accessFor(stageId: string, userId: string, write = false, admin = false) {
   const db = await getStageAccessDb();
   const access = await resolveStageAccess(stageId, db);
   if (!access) return null;
   const role = await stageRole(db, stageId, userId);
-  if (role === 'none' || (write && role !== 'owner' && role !== 'editor')) return null;
-  return { ownerId: access.ownerId, role };
+  if ((role === 'none' && !admin) || (write && role !== 'owner' && !admin)) return null;
+  return { ownerId: access.ownerId, role, isAdmin: admin };
 }
 
 /** A save refused because the payload is not a structurally valid document. */
@@ -76,9 +77,10 @@ function mapSaveError(error: unknown, headers: Headers) {
 export async function GET(req: NextRequest, { params }: Params) {
   if (!isAgentRuntimeConfigured()) return new Response('Not found', { status: 404 });
 
-  return withRequestOwnerId(req, async (ownerId, responseHeaders) => {
+  return withRequestOwnerId(req, async (ownerId, responseHeaders, user) => {
     const { id } = await params;
-    const access = await accessFor(id, ownerId);
+    const admin = isAdminUser(user);
+    const access = await accessFor(id, ownerId, false, admin);
     if (!access) return ownerNotFound(responseHeaders);
     const store = await getOwnerScopedDocumentStore(access.ownerId);
     const document = await store.loadDocument(id);
@@ -110,9 +112,9 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     );
   }
 
-  return withRequestOwnerId(req, async (ownerId, responseHeaders) => {
+  return withRequestOwnerId(req, async (ownerId, responseHeaders, user) => {
     const { id } = await params;
-    const access = await accessFor(id, ownerId, true);
+    const access = await accessFor(id, ownerId, true, isAdminUser(user));
     if (!access) return ownerNotFound(responseHeaders);
     const store = await getOwnerScopedDocumentStore(access.ownerId);
     const document = await store.loadDocument(id);
@@ -158,7 +160,7 @@ export async function PUT(req: NextRequest, { params }: Params) {
     );
   }
 
-  return withRequestOwnerId(req, async (ownerId, responseHeaders) => {
+  return withRequestOwnerId(req, async (ownerId, responseHeaders, user) => {
     const { id } = await params;
     if (candidate.stage!.id !== id) {
       return ownerApiError(
@@ -168,7 +170,7 @@ export async function PUT(req: NextRequest, { params }: Params) {
         responseHeaders,
       );
     }
-    const access = await accessFor(id, ownerId, true);
+    const access = await accessFor(id, ownerId, true, isAdminUser(user));
     if (!access) return ownerNotFound(responseHeaders);
     const store = await getOwnerScopedDocumentStore(access.ownerId);
     // Save is existence-gated (the reference's update path is too): PUT
@@ -197,9 +199,9 @@ export async function PUT(req: NextRequest, { params }: Params) {
 export async function DELETE(req: NextRequest, { params }: Params) {
   if (!isAgentRuntimeConfigured()) return new Response('Not found', { status: 404 });
 
-  return withRequestOwnerId(req, async (ownerId, responseHeaders) => {
+  return withRequestOwnerId(req, async (ownerId, responseHeaders, user) => {
     const { id } = await params;
-    const access = await accessFor(id, ownerId, true);
+    const access = await accessFor(id, ownerId, true, isAdminUser(user));
     if (!access || access.role !== 'owner') return ownerNotFound(responseHeaders);
     const store = await getOwnerScopedDocumentStore(access.ownerId);
     await store.deleteDocument(id);

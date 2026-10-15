@@ -19,6 +19,7 @@ import type { StageMetaResult } from './stage-meta-client';
 
 export interface StageAccessSignal {
   isOwner: boolean;
+  canEdit: boolean;
 }
 
 const stageOwnership = new Map<string, { resolved: boolean; access: StageAccessSignal | null }>();
@@ -58,7 +59,7 @@ export function getStageAccessSignal(stageId: string): StageAccessSignal | null 
  * enforces ownership.
  */
 export function resolveStageFallbackAccess(stageId: string): StageAccessSignal {
-  return getStageAccessSignal(stageId) ?? { isOwner: true };
+  return getStageAccessSignal(stageId) ?? { isOwner: true, canEdit: true };
 }
 
 /** Test hook: forget every recorded outcome. */

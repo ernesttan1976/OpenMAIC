@@ -28,6 +28,7 @@ import { isServerPersistenceConfigured } from '@/lib/config/feature-flags';
 import { getStageAccessDb, resolveStageAccess } from '@/lib/server/stage-access';
 import { withRequestOwnerId } from '@/lib/server/agent-runtime/with-owner';
 import { stageRole } from '@/lib/persistence/stage-collaborators';
+import { isAdminUser } from '@/lib/auth/users';
 
 // Per-viewer and mutable on every publish/unpublish/delete: this response must
 // never be cached, by Next or by anything in front of it.
@@ -47,7 +48,7 @@ export async function GET(req: NextRequest, { params }: Params) {
   // owner".
   if (!isServerPersistenceConfigured()) return new Response('Not found', { status: 404 });
 
-  return withRequestOwnerId(req, async (ownerId, responseHeaders) => {
+  return withRequestOwnerId(req, async (ownerId, responseHeaders, user) => {
     const { stageId } = await params;
     try {
       const access = await resolveStageAccess(stageId);
@@ -57,21 +58,21 @@ export async function GET(req: NextRequest, { params }: Params) {
         return NextResponse.json({ error: 'not_found' }, { status: 404, headers: responseHeaders });
       }
 
-      // Identity comparison, and nothing else: this boolean is the client's
-      // ONLY owner signal, so a `true` here must mean every write through the
-      // owner-bound store will be accepted (the store re-checks the owner
-      // scope inside its write transactions).
-       const role = await stageRole(await getStageAccessDb(), stageId, ownerId);
-       if (role === 'none') {
-         return NextResponse.json({ error: 'not_found' }, { status: 404, headers: responseHeaders });
-       }
-       const isOwner = role === 'owner';
+      // Keep actual ownership separate from edit capability: administrators
+      // can edit across owners, while collaborators receive read-only access.
+      const db = await getStageAccessDb();
+      const role = await stageRole(db, stageId, ownerId);
+      const admin = isAdminUser(user);
+      if (role === 'none' && !admin) {
+        return NextResponse.json({ error: 'not_found' }, { status: 404, headers: responseHeaders });
+      }
+      const isOwner = role === 'owner';
 
       return NextResponse.json(
         {
-           isOwner,
-           canEdit: role === 'owner' || role === 'editor',
-           role,
+          isOwner,
+          canEdit: role === 'owner' || admin,
+          role: admin && role !== 'owner' ? 'admin' : role,
           isPublic: access.isPublic,
           publishedAt: access.publishedAt,
           generationComplete: access.generationComplete,

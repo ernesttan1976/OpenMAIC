@@ -112,11 +112,13 @@ export interface StageListItem {
   taskEngineMode?: boolean;
   /** Folder this course belongs to; undefined = unfiled. */
   folderId?: string;
-  /** False when this shared course belongs to another user and is read-only. */
+  /** Whether the current account may edit the course. */
+  canEdit?: boolean;
+  /** False when this course belongs to another account. */
   isOwner?: boolean;
 }
 
-type SharedStageSummary = DocumentSummary & { isOwner?: boolean };
+type SharedStageSummary = DocumentSummary & { isOwner?: boolean; canEdit?: boolean };
 
 function stampStage(stageId: string, stage: Stage, now: number): Stage {
   return {
@@ -791,6 +793,7 @@ async function listSharedStagesFromServer(): Promise<StageListItem[]> {
         ...(item.interactiveMode !== undefined ? { interactiveMode: item.interactiveMode } : {}),
         ...(item.taskEngineMode !== undefined ? { taskEngineMode: item.taskEngineMode } : {}),
         ...(item.isOwner !== undefined ? { isOwner: item.isOwner } : {}),
+        ...(item.canEdit !== undefined ? { canEdit: item.canEdit } : {}),
       };
       return item.folderId ? { ...base, folderId: item.folderId } : base;
     })

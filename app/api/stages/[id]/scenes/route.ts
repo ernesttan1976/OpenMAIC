@@ -26,6 +26,8 @@ import { apiError } from '@/lib/server/api-response';
 import { getOwnerScopedDocumentStore } from '@/lib/server/agent-runtime/owner-scoped-documents';
 import { ownerJson, ownerNotFound } from '@/lib/server/agent-runtime/route-response';
 import { withRequestOwnerId } from '@/lib/server/agent-runtime/with-owner';
+import { canViewStageForUser, getStageAccessDb, resolveStageAccess } from '@/lib/server/stage-access';
+import { isAdminUser } from '@/lib/auth/users';
 
 export const runtime = 'nodejs';
 
@@ -69,9 +71,13 @@ export async function GET(req: NextRequest, { params }: Params) {
     );
   }
 
-  return withRequestOwnerId(req, async (ownerId, responseHeaders) => {
+  return withRequestOwnerId(req, async (ownerId, responseHeaders, user) => {
     const { id } = await params;
-    const store = await getOwnerScopedDocumentStore(ownerId);
+    const db = await getStageAccessDb();
+    if (!(await canViewStageForUser(id, ownerId, isAdminUser(user), db))) return ownerNotFound(responseHeaders);
+    const access = await resolveStageAccess(id, db);
+    if (!access) return ownerNotFound(responseHeaders);
+    const store = await getOwnerScopedDocumentStore(access.ownerId);
     const document = await store.loadDocument(id);
     if (!document) return ownerNotFound(responseHeaders);
     const wanted = new Set(requested);

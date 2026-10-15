@@ -24,6 +24,7 @@ import { readStageMeta } from '@/lib/persistence/stage-meta';
 import { stageRole } from '@/lib/persistence/stage-collaborators';
 import { APP_RUNTIME_PAYLOAD_VALIDATORS } from '@/lib/runtime/payload-validators';
 import { withRequestOwnerId } from '@/lib/server/agent-runtime/with-owner';
+import { isAdminUser } from '@/lib/auth/users';
 
 export const runtime = 'nodejs';
 
@@ -309,7 +310,7 @@ export async function handlePersistenceRequest(
   if (!connectionString) {
     return jsonError(404, 'PERSISTENCE_NOT_CONFIGURED', 'server persistence not configured');
   }
-  return withRequestOwnerId(request, async (ownerId, responseHeaders) => {
+  return withRequestOwnerId(request, async (ownerId, responseHeaders, user) => {
     try {
       const path = routeRelativePath(request);
       const action = parseDocumentAction(request.method, path);
@@ -328,6 +329,7 @@ export async function handlePersistenceRequest(
               .then((result) => result.rows.length > 0),
           (stageId) => readStageMeta(queryable, stageId),
           (stageId, userId) => stageRole(queryable, stageId, userId),
+          isAdminUser(user),
         );
         if (action.kind !== 'create' && action.kind !== 'list' && action.kind !== 'unknown') {
           const meta = await readStageMeta(queryable, action.stageId);

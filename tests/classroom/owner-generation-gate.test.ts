@@ -31,7 +31,14 @@ const OWNERSHIPS: readonly ClassroomGenerationOwnership[] = [
 function found(isOwner: boolean): StageMetaResult {
   return {
     outcome: 'found',
-    meta: { isOwner, isPublic: false, publishedAt: null, generationComplete: false },
+    meta: {
+      isOwner,
+      canEdit: isOwner,
+      role: isOwner ? 'owner' : 'viewer',
+      isPublic: false,
+      publishedAt: null,
+      generationComplete: false,
+    },
   };
 }
 

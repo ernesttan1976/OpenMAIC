@@ -63,6 +63,7 @@ export async function decideDocumentAccess(
   documentExists: DocumentExistenceReader,
   rereadMeta: StageMetaReader = readMeta,
   readRole?: CollaboratorRoleReader,
+  isAdmin = false,
 ): Promise<DocumentAccess> {
   if (!ownerId) return 'forbid';
   switch (action.kind) {
@@ -74,14 +75,14 @@ export async function decideDocumentAccess(
       if (!meta) return 'not-found';
       if (meta.deletedAt !== null) return 'not-found';
       const role = readRole ? await readRole(action.stageId, ownerId) : meta.ownerId === ownerId ? 'owner' : 'none';
-      return role === 'none' ? 'forbid' : 'allow';
+      return role === 'none' && !isAdmin ? 'forbid' : 'allow';
     }
     case 'write': {
       const meta = await readMeta(action.stageId);
       if (!meta) return 'not-found';
       if (meta.deletedAt !== null) return 'not-found';
       const role = readRole ? await readRole(action.stageId, ownerId) : meta.ownerId === ownerId ? 'owner' : 'none';
-      return role === 'owner' || role === 'editor' ? 'allow' : 'forbid';
+      return role === 'owner' || isAdmin ? 'allow' : 'forbid';
     }
     case 'delete': {
       const meta = await readMeta(action.stageId);

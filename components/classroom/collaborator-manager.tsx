@@ -6,7 +6,6 @@ import { HeaderActionPortal } from '@/components/header-action-portal';
 export function CollaboratorManager({ stageId }: { stageId: string }) {
   const [open, setOpen] = useState(false);
   const [email, setEmail] = useState('');
-  const [role, setRole] = useState<'viewer' | 'editor'>('viewer');
   const [message, setMessage] = useState('');
 
   async function invite() {
@@ -14,7 +13,7 @@ export function CollaboratorManager({ stageId }: { stageId: string }) {
     const response = await fetch(`/api/stages/${encodeURIComponent(stageId)}/collaborators`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ email, role }),
+      body: JSON.stringify({ email, role: 'viewer' }),
     });
     if (!response.ok) {
       setMessage('Only the classroom owner can manage collaborators.');
@@ -52,14 +51,7 @@ export function CollaboratorManager({ stageId }: { stageId: string }) {
               onChange={(event) => setEmail(event.target.value)}
               required
             />
-            <select
-              className="mb-2 w-full rounded border p-2"
-              value={role}
-              onChange={(event) => setRole(event.target.value as 'viewer' | 'editor')}
-            >
-              <option value="viewer">Viewer</option>
-              <option value="editor">Editor</option>
-            </select>
+            <p className="mb-2 text-xs text-muted-foreground">Shared courses can be viewed but not edited.</p>
             <button className="rounded bg-primary px-3 py-2 text-sm text-primary-foreground" type="submit">
               Invite
             </button>

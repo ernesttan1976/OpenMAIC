@@ -28,6 +28,9 @@ import { isAgentRuntimeConfigured } from '@/lib/config/feature-flags';
 import { resolveRequestOwnerId } from '@/lib/server/agent-runtime/owner';
 import { getOwnerScopedDocumentStore } from '@/lib/server/agent-runtime/owner-scoped-documents';
 import { ownerNotFound } from '@/lib/server/agent-runtime/route-response';
+import { getRequestUser } from '@/lib/auth/request-user';
+import { isAdminUser } from '@/lib/auth/users';
+import { canViewStageForUser, getStageAccessDb, resolveStageAccess } from '@/lib/server/stage-access';
 
 export const runtime = 'nodejs';
 // Self-hosted `next start` ignores maxDuration; Vercel's adapter can still use
@@ -53,7 +56,14 @@ export async function GET(req: NextRequest, { params }: Params) {
   // Existence-gated, exactly like the manifest route: the owner-bound store
   // reads a foreign or missing stage as absent, and the 404 carries the
   // owner cookie the same way every response of this family does.
-  const store = await getOwnerScopedDocumentStore(ownerId);
+  const user = await getRequestUser(req);
+  const db = await getStageAccessDb();
+  if (!(await canViewStageForUser(stageId, ownerId, user ? isAdminUser(user) : false, db))) {
+    return ownerNotFound(responseHeaders);
+  }
+  const access = await resolveStageAccess(stageId, db);
+  if (!access) return ownerNotFound(responseHeaders);
+  const store = await getOwnerScopedDocumentStore(access.ownerId);
   const initial = await store.readFreshnessManifest(stageId);
   if (!initial) return ownerNotFound(responseHeaders);
 

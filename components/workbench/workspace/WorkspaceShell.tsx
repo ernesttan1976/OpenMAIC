@@ -926,19 +926,14 @@ function WorkspaceShellController({ initialPanes }: { readonly initialPanes: Wor
   }, [panes.courseId, playbackOn, setPlaybackOn]);
 
   // ── Read-only ─────────────────────────────────────────────────────────
-  // The tree already knows: a course saved from Discover carries
-  // `isOwner === false`. The stage store's own answer arrives after the load
-  // and is authoritative once it does; before that the tree's flag keeps the
-  // header from claiming an edit deck it is about to lose. The real store
-  // carries that answer as `outlineProducer` (the reference's `isOwner` was
-  // not ported): a course whose document a server job produced is server-owned,
-  // not client-authored, and therefore not the current user's own to edit.
-  const storeIsOwner = useStageStore((s) => s.outlineProducer) !== 'server-job';
-  const courseIsOwner = useMemo(
-    () => courses.classrooms.find((course) => course.id === panes.courseId)?.isOwner,
-    [courses.classrooms, panes.courseId],
-  );
-  const readOnlyCourse = courseIsOwner === false || storeIsOwner === false;
+  // Course-list permission prevents an initial editable flash; the sidecar
+  // permission in the stage store becomes authoritative after course load.
+  const storeCanEdit = useStageStore((s) => s.canEdit ?? s.isOwner);
+  const courseCanEdit = useMemo(() => {
+    const course = courses.classrooms.find((item) => item.id === panes.courseId);
+    return course?.canEdit ?? course?.isOwner;
+  }, [courses.classrooms, panes.courseId]);
+  const readOnlyCourse = courseCanEdit === false || !storeCanEdit;
 
   /* ── What a course is CALLED ───────────────────────────────────────────
      Tabs and in-chat links both need a name and a page count for an id, and

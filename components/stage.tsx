@@ -91,13 +91,11 @@ export function Stage({
   }, [proWorkbenchFlag]);
   const proWorkbenchEntry = proWorkbenchFlag && proRuntime === 'on';
   const currentScene = useStageStore((s) => s.getCurrentScene());
-  // The reference implementation makes editing owner-only. `isOwner` is true for the stage creator and
-  // defaults to true with browser storage (single-user IndexedDB), so this gate is
-  // a no-op upstream but hides Pro mode from visitors / bookmarked viewers in
-  // server-backed mode — their saves would not pass the owner check anyway.
-  const isOwner = useStageStore((s) => s.isOwner);
+  // Browser storage defaults to editable; server-backed access is resolved by
+  // the stage-meta sidecar and the write routes enforce the same permission.
+  const canEdit = useStageStore((s) => s.canEdit);
   const readOnly = useStageStore((s) => s.readOnly);
-  const canEditOwnedStage = isOwner && !readOnly;
+  const canEditOwnedStage = canEdit && !readOnly;
 
   // Hosted by the Pro workspace's classroom pane. Ambient rather than a prop
   // because `Stage` is built by `ClassroomSurface`, which is mounted by both
@@ -296,7 +294,7 @@ export function Stage({
     ? workbenchPlayback
       ? handleExitWorkbench
       : undefined
-    : !isOwner || proRuntime === 'pending'
+    : !canEdit || proRuntime === 'pending'
       ? undefined
       : proWorkbenchEntry
         ? handleEnterWorkbench

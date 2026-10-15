@@ -8,6 +8,7 @@ export interface AuthenticatedUser {
   email: string;
   name: string | null;
   image: string | null;
+  role: 'admin' | 'user';
 }
 
 interface SessionPayload {
